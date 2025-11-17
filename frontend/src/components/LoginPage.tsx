@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { HelpCircle } from 'lucide-react';
@@ -9,12 +10,13 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const { loginWithRedirect } = useAuth0();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simply navigate to the main app
+    // Simulate login and go to main page
     onLogin();
   };
 
@@ -45,16 +47,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </div>
         </div>
 
-        {/* Login Form */}
+        {/* Login Form + Social Login Buttons */}
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
           {/* Form Header */}
           <div className="bg-[#1e3a5f] text-white px-8 py-6">
             <h2 className="text-2xl mb-2">Sign In</h2>
             <p className="text-gray-300 text-sm">
-              Enter your credentials to access your account
+              Enter your credentials or choose a provider
             </p>
           </div>
-
           {/* Form Body */}
           <form onSubmit={handleLogin} className="px-8 py-8 space-y-6">
             {/* Email Field */}
@@ -71,7 +72,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 className="w-full bg-gray-100 border-gray-300 rounded-lg px-4 py-3"
               />
             </div>
-
             {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-gray-700 mb-2">
@@ -86,7 +86,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 className="w-full bg-gray-100 border-gray-300 rounded-lg px-4 py-3"
               />
             </div>
-
             {/* Forgot Password */}
             <div>
               <button
@@ -97,7 +96,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 Forgot password?
               </button>
             </div>
-
             {/* Buttons */}
             <div className="space-y-3 pt-2">
               <Button
@@ -106,7 +104,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               >
                 Log In
               </Button>
-              
               <Button
                 type="button"
                 variant="outline"
@@ -117,6 +114,37 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </Button>
             </div>
           </form>
+          {/* Social Login Buttons - Modern Vertical Style */}
+          <div className="px-8 pb-8 flex flex-col gap-4">
+            <button
+              className="w-full flex items-center gap-4 bg-white text-gray-900 font-semibold py-4 rounded-lg hover:bg-gray-900 transition-colors shadow"
+              onClick={() => loginWithRedirect({ connection: "apple" } as any)}
+            >
+              <span className="inline-block w-7 h-7 flex items-center justify-center">
+                {/* Apple SVG */}
+               </span>
+              <span className="text-left flex-1">Log in with Apple</span>
+            </button>
+            <button
+              className="w-full flex items-center gap-4 bg-white text-gray-900 font-semibold py-4 rounded-lg hover:bg-gray-900 transition-colors shadow"
+               onClick={() => loginWithRedirect({ connection: "google-oauth2" } as any)}
+            >
+              <span className="inline-block w-7 h-7 flex items-center justify-center">
+                {/* Google SVG */}
+                
+              </span>
+              <span className="text-left flex-1">Log in with Google</span>
+            </button>
+            <button
+              className="w-full flex items-center gap-4 bg-white text-gray-900 font-semibold py-4 rounded-lg hover:bg-gray-900 transition-colors shadow"
+              onClick={() => loginWithRedirect({ connection: "windowslive" } as any)}
+            >
+              <span className="inline-block w-7 h-7 flex items-center justify-center">
+                {/* Microsoft SVG */}
+                 </span>
+              <span className="text-left flex-1">Log in with Microsoft</span>
+            </button>
+          </div>
         </div>
 
         {/* Footer */}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
 import { Header } from './components/Header';
 import { MainContent } from './components/MainContent';
 import { LoginPage } from './components/LoginPage';
@@ -47,6 +48,7 @@ function generateRandomLocations(count: number) {
 }
 
 export default function App() {
+  const { loginWithRedirect, logout, isAuthenticated, user, isLoading } = useAuth0();
   const [pathOptions, setPathOptions] = useState<PathOption[]>([]);
   const [showRestore, setShowRestore] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -141,7 +143,7 @@ export default function App() {
       pathOptions: paths
     };
     
-    setSearchHistory(prev => [historyEntry, ...prev]);
+  setSearchHistory((prev: SearchHistoryEntry[]) => [historyEntry, ...prev]);
   };
 
   const handleShowRestore = () => {
@@ -159,7 +161,7 @@ export default function App() {
     setShowRestore(false);
   };
 
-  // Show login page if not logged in
+  // Show login page if not logged in (local login)
   if (!isLoggedIn) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -179,7 +181,6 @@ export default function App() {
         onGeneratePaths={handleGeneratePaths}
         onShowRestore={handleShowRestore}
       />
-      
       <MainContent 
         pathOptions={pathOptions}
         showRestore={showRestore}
