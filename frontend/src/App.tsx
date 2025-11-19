@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { MainContent } from './components/MainContent';
 import { LoginPage } from './components/LoginPage';
 import { SearchHistoryPage } from './components/SearchHistoryPage';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 interface ScheduleItem {
   time: string;
@@ -51,24 +52,56 @@ function generateRandomLocations(count: number) {
 }
 
 export default function App() {
-  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated, isLoading, getAccessTokenSilently, logout } = useAuth0();
+  const navigate = useNavigate();
   const [pathOptions, setPathOptions] = useState<PathOption[]>([]);
   const [showRestore, setShowRestore] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
   const [currentUserRequest, setCurrentUserRequest] = useState<string>('');
   const [currentRequestedDate, setCurrentRequestedDate] = useState<string>('');
-
-  // Automatically set isLoggedIn when Auth0 login is complete
-  useEffect(() => {
-    if (isAuthenticated) {
-      setIsLoggedIn(true);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    // If we already stored a login flag, trust it
+    if (window.localStorage.getItem('uipathfinder_logged_in') === 'true') {
+      return true;
     }
-  }, [isAuthenticated]);
+    // If we just came back from Auth0, there will be a ?code=... param
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code')) {
+      window.localStorage.setItem('uipathfinder_logged_in', 'true');
+      return true;
+    }
+    return false;
+  });
+  const isAuthed = isAuthenticated || isLoggedIn;
 
   const handleLogin = () => {
+    // Local login: mark as logged in and go to main page
     setIsLoggedIn(true);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('uipathfinder_logged_in', 'true');
+    }
+    navigate('/');
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setPathOptions([]);
+    setShowRestore(false);
+    setSearchHistory([]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('uipathfinder_logged_in');
+    }
+    // Call Auth0 logout if available
+    if (typeof window !== 'undefined') {
+      logout({
+        logoutParams: {
+          returnTo: `${window.location.origin}/login`
+        }
+      });
+    } else {
+      navigate('/login');
+    }
   };
 
   const handleGeneratePaths = (userRequest: string, date: string) => {
@@ -215,46 +248,62 @@ export default function App() {
   };
 
   const handleShowRestore = () => {
-    setShowRestore(!showRestore);
-    setShowHistory(true);
+    setShowRestore(false);
+    navigate('/history');
   };
 
   const handleBackFromHistory = () => {
-    setShowHistory(false);
+    navigate('/');
   };
 
   const handleRestoreFromHistory = (entry: SearchHistoryEntry) => {
     setPathOptions(entry.pathOptions);
-    setShowHistory(false);
     setShowRestore(false);
+    navigate('/');
   };
 
-  // Show login page if not logged in (local login)
-  if (!isLoggedIn) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
-  // Show history page if requested
-  if (showHistory) {
-    return <SearchHistoryPage 
-      onBack={handleBackFromHistory} 
-      searchHistory={searchHistory}
-      onRestoreSearch={handleRestoreFromHistory}
-    />;
-  }
+  const mainElement = isLoading ? (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-gray-500">Loading...</div>
+    </div>
+  ) : !isAuthed ? (
+    <LoginPage onLogin={handleLogin} />
+  ) : (
+    <div className="min-h-screen bg-gray-50">
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg bg-orange-500 text-white font-bold noto-sans-uniquifier">
+          {toast.message}
+        </div>
+      )}
+      <Header onGeneratePaths={handleGeneratePaths} onShowRestore={handleShowRestore} onLogout={handleLogout} />
+      <MainContent pathOptions={pathOptions} showRestore={showRestore} onSelectPlan={handleSelectPlan} />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {toast && <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg bg-orange-500 text-white font-bold noto-sans-uniquifier`}>{toast.message}</div>}
-      <Header 
-        onGeneratePaths={handleGeneratePaths}
-        onShowRestore={handleShowRestore}
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <Navigate to="/" replace />
+        }
       />
-      <MainContent 
-        pathOptions={pathOptions}
-        showRestore={showRestore}
-        onSelectPlan={handleSelectPlan}
+      <Route
+        path="/history"
+        element={
+          !isAuthed ? (
+            <Navigate to="/login" replace />
+          ) : (
+            <SearchHistoryPage
+              onBack={handleBackFromHistory}
+              searchHistory={searchHistory}
+              onRestoreSearch={handleRestoreFromHistory}
+            />
+          )
+        }
       />
-    </div>
+      <Route path="/" element={mainElement} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

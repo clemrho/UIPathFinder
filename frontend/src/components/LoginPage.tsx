@@ -23,6 +23,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     }
   }, [isAuthenticated, onLogin]);
 
+  const authRedirectParams = {
+    authorizationParams: {
+      redirect_uri: window.location.origin
+    }
+  } as const;
+
   return (
     <div 
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
@@ -107,7 +113,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 type="button"
                 variant="outline"
                 className="w-full border-2 border-gray-900 text-gray-900 hover:bg-gray-50 py-6 rounded-lg transition-colors"
-                onClick={() => loginWithRedirect()}
+                onClick={() => loginWithRedirect(authRedirectParams)}
               >
                 Login with Social Media
               </Button>
@@ -115,7 +121,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 type="button"
                 variant="outline"
                 className="w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 py-6 rounded-lg transition-colors"
-                onClick={() => loginWithRedirect({ authorizationParams: { prompt: 'login' } })}
+                onClick={() => loginWithRedirect({ ...authRedirectParams, authorizationParams: { ...authRedirectParams.authorizationParams, prompt: 'login' } })}
               >
                 Re-authorize Account
               </Button>
