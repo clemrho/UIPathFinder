@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+// no React hooks needed here
 import { EnhancedPathSuggestions } from './EnhancedPathSuggestions';
 
 interface ScheduleItem {
@@ -17,6 +17,8 @@ interface PathOption {
 interface MainContentProps {
   pathOptions: PathOption[];
   showRestore: boolean;
+  userRequest?: string;
+  onSelectPlan?: (selected: PathOption) => void | Promise<void>;
 }
 
 const CalendarIcon = () => (
@@ -26,7 +28,7 @@ const CalendarIcon = () => (
   </svg>
 );
 
-export function MainContent({ pathOptions, showRestore }: MainContentProps) {
+export function MainContent({ pathOptions, showRestore, onSelectPlan }: MainContentProps) {
   if (showRestore) {
     return (
       <div className="container mx-auto px-6 py-8">
@@ -62,7 +64,7 @@ export function MainContent({ pathOptions, showRestore }: MainContentProps) {
 
   return (
     <div className="container mx-auto px-6 py-8">
-      <EnhancedPathSuggestions pathOptions={pathOptions} />
+  <EnhancedPathSuggestions pathOptions={pathOptions} onSelectPlan={onSelectPlan} />
     </div>
   );
 }
