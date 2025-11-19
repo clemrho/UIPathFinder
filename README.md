@@ -1,5 +1,7 @@
 # UIPathFinder – UIUC Smart Schedule & Path Planner
 
+> "Big Brother is Watching You."  --- _1984_
+
 UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a clean React frontend, an API backend, and (in the next stage) a RAG-based LLM pipeline that grounds suggestions in real campus data.
 
 The current version focuses on the full user flow (login → plan generation → saving history) and establishes the data models and UI needed for more advanced AI features.
