@@ -144,4 +144,3 @@ Planned components:
 ## Summary
 
 UIPathFinder already supports login, schedule generation, and history management with a clean UI. The next iteration will focus on RAG-based, data-grounded path planning that uses real UIUC transit, weather, and building data, plus robust post-processing to deliver high-quality, structured schedules to the frontend.
-s
