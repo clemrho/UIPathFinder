@@ -2,9 +2,12 @@
 
 > "Big Brother is Watching You."  --- _1984_
 
-UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a clean React frontend, an API backend, and (in the next stage) a RAG-based LLM pipeline that grounds suggestions in real campus data.
+UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a React frontend, an API backend, and an LLM/RAG layer that will ground suggestions in real campus data.
 
-The current version focuses on the full user flow (login → plan generation → saving history) and establishes the data models and UI needed for more advanced AI features.
+The current version focuses on:
+- A full user flow (Auth0 login → main planner → history).
+- A deterministic “mock” schedule generator in the frontend.
+- A first LLM integration against Fireworks.ai with a reusable prompt and output schema (`reason` + `pathResult`).
 
 ---
 
@@ -15,19 +18,28 @@ The current version focuses on the full user flow (login → plan generation →
   - Auth-protected routes (`/` main planner, `/history` search history).
   - Logout support and session persistence.
 
+![login](md_img/login.png)
+
+
 - **Main Planning Page (`/`)**
   - Prompt-based request: users describe the kind of day they want (classes, study, gym, etc.) and pick a date.
   - Generates multiple “path options” – each is a sequence of time-stamped activities at UIUC locations.
   - UI shows each option as a structured schedule (time, location, activity) with coordinates for each stop.
+
+![main](md_img/search.png)
+![main](md_img/mapinfo.png)
 
 - **Search History Page (`/history`)**
   - View previously saved schedules.
   - Click an entry to restore it into the main view.
   - Persists either via MongoDB (for authenticated users) or local in-memory history (fallback).
 
+![hist](md_img/history.png)
+
 - **Backend Integration**
   - API endpoints to save and list history entries.
   - History items store the original user request, requested date, and the selected path option(s).
+  - Prototype LLM endpoint (`/api/fireworks-test`) that calls a Llama-based model on Fireworks.ai and returns a structured schedule-like JSON.
 
 ---
 
@@ -44,6 +56,13 @@ The current version focuses on the full user flow (login → plan generation →
   - Node.js / Express
   - MongoDB models for `user` and `history`
   - REST API consumed by the frontend via `src/api/histories.ts`
+  - Fireworks.ai LLM integration (via the `openai` client) using a Llama-based model
+
+- **LLM / Prompting**
+  - Central prompt builder in `LLM/llmama.js`
+  - Prototype LLM caller + JSON post-processing in `backend/index.js` (`callFireworksAPI`)
+  Models Using (To be implemented): qwen3-32b, llama-v3p1-8b-instruct, FalconH1
+
 
 ---
 
@@ -67,6 +86,79 @@ The current version focuses on the full user flow (login → plan generation →
     - Save a selected plan.
     - List histories.
     - Get a single history by ID.
+  - Provides a prototype LLM test endpoint:
+    - `GET /api/fireworks-test` → calls Fireworks.ai with a structured prompt and returns:
+      ```json
+      {
+        "success": true,
+        "status": "GOOD RESULT" | "NOT ENOUGH CONTEXT" | "NOT FINAL RESULT" | "FAILED",
+        "reason": "short explanation (3–150 words)",
+        "pathResult": [ /* schedule items or empty */ ]
+      }
+      ```
+
+- **LLM Prompt Module**
+  - `LLM/llmama.js`:
+    - `buildFireworksPrompt(...)` builds the full system + context + planning-rules + JSON-schema prompt.
+    - Designed so future backends (local Llama, Mamba, etc.) can reuse the same prompt.
+
+---
+
+## LLM Prototype: Fireworks.ai + Llama
+
+This project includes an early LLM integration to experiment with schedule generation before the full RAG pipeline is wired up.
+
+- **Prompt Contract**
+  - Model is instructed to:
+    - Create exactly one schedule (a “path”) for the given day.
+    - Return a single JSON object with:
+      - `reason`: 3–150 word explanation of how the schedule was built or why context is limited.
+      - `pathResult`: array with at most one element, each containing a `title` and a `schedule` array of `{ time, location, activity, coordinates, notes }`.
+    - Use one of three leading flags in raw text:
+      - `GOOD RESULT` → schedule is acceptable.
+      - `NOT FINAL RESULT` → model isn’t ready; backend will retry up to 3 times.
+      - `NOT ENOUGH CONTEXT` → schedule may be incomplete, but is still treated as a “success” with an explanatory `reason`.
+
+- **Backend Post-Processing**
+  - Strips the leading flag, extracts the JSON block, and parses it.
+  - Ensures:
+    - `pathResult` exists; if more than one path is returned, only the first is kept.
+    - A `reason` field is always present and truncated to ~150 words.
+    - If no usable JSON is returned, the backend falls back to:
+      ```json
+      {
+        "status": "FAILED" | "NOT ENOUGH CONTEXT",
+        "data": {
+          "reason": "model explanation / error text",
+          "pathResult": []
+        }
+      }
+      ```
+  - The `/api/fireworks-test` route surfaces this as:
+    ```json
+    {
+      "success": true,
+      "status": "...",
+      "reason": "...",
+      "pathResult": [ ... ]
+    }
+    ```
+
+- **Configuring Fireworks.ai Locally**
+  - Set your API key and model in `backend/.env`:
+    ```env
+    FIREWORKS_API_KEY=sk-...
+    ```
+  - The backend uses:
+    - `baseURL = https://api.fireworks.ai/inference/v1`
+    - `model = "accounts/fireworks/models/llama-v3p1-8b-instruct"`
+  - To test:
+    - Start the backend: `cd backend && npm install && node index.js`
+    - Call from a terminal or REST client:
+      ```bash
+      curl http://localhost:3001/api/fireworks-test
+      ```
+    - You should see JSON with `status`, `reason`, and `pathResult`.
 
 ---
 
@@ -143,4 +235,4 @@ Planned components:
 
 ## Summary
 
-UIPathFinder already supports login, schedule generation, and history management with a clean UI. The next iteration will focus on RAG-based, data-grounded path planning that uses real UIUC transit, weather, and building data, plus robust post-processing to deliver high-quality, structured schedules to the frontend.
+UIPathFinder already supports login, schedule generation (deterministic mock paths), and history management with a clean UI. On the backend, a prototype LLM pipeline (via Fireworks.ai + Llama and a centralized prompt in `LLM/llmama.js`) is in place to experiment with JSON-based schedule generation and reliability flags. The next iterations will focus on wiring real RAG context (MongoDB data, UIUC MTD, weather, building DB) into that pipeline so the suggested paths are grounded in live campus information.***
