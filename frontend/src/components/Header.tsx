@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Toast } from './Toast';
 
 interface HeaderProps {
-  onGeneratePaths: (userRequest: string, date: string) => void;
+  onGeneratePaths: (userRequest: string, date: string) => void | Promise<void>;
   onShowRestore: () => void;
   onLogout: () => void;
 }
@@ -38,7 +38,7 @@ export function Header({ onGeneratePaths, onShowRestore, onLogout }: HeaderProps
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!inputMessage.trim()) {
@@ -51,7 +51,7 @@ export function Header({ onGeneratePaths, onShowRestore, onLogout }: HeaderProps
       return;
     }
 
-    onGeneratePaths(inputMessage, selectedDate);
+    await onGeneratePaths(inputMessage, selectedDate);
     showToast('Generating schedule suggestions...', 'success');
   };
 

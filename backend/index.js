@@ -139,11 +139,42 @@ app.get('/api/histories/:id', checkJwt, async (req, res) => {
   }
 });
 
+// Shared fallback path: study at Grainger Library then sleep at ECEB
+const GRAINGER_COORDS = { lat: 40.1125, lng: -88.2267 };
+const ECEB_COORDS = { lat: 40.1149, lng: -88.228 };
+
+function buildGraingerFallbackPath(title) {
+  const pathTitle = title || 'Fallback: Grainger Library + ECEB';
+  return {
+    title: pathTitle,
+    fallback: true,
+    schedule: [
+      {
+        time: '13:00',
+        location: 'Grainger Library 2F',
+        activity: 'Study at Grainger Library from 13:00 to 23:00.',
+        coordinates: { ...GRAINGER_COORDS },
+        notes: 'no where to go, sleep at grainger 2F.',
+      },
+      {
+        time: '23:00',
+        location: 'ECE Building (ECEB)',
+        activity: 'Sleep at ECEB from 23:00 to 09:00.',
+        coordinates: { ...ECEB_COORDS },
+        notes: 'no where to go, sleep at grainger 2F.',
+      },
+    ],
+  };
+}
+
 /**
- * Calls the Fireworks.ai API with a test prompt.
+ * Calls the Fireworks.ai API with a schedule-planning prompt (single attempt).
  * This uses dynamic import() for the ESM-only 'openai' package.
  */
-async function callFireworksAPI() {
+async function callFireworksAPI({
+  model = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+  promptArgs,
+} = {}) {
   // Dynamically import the openai library
   const { default: OpenAI } = await import('openai');
 
@@ -158,131 +189,106 @@ async function callFireworksAPI() {
 
   // For now we call the prompt builder with default placeholder blocks.
   // Later, you can pass real context from MongoDB / external APIs.
-  const basePrompt = buildFireworksPrompt();
+  const basePrompt = buildFireworksPrompt(promptArgs);
 
-  let attempts = 0;
-  let lastContent = null;
+  console.log(`Fireworks API call with model ${model}`);
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: basePrompt,
+      },
+    ],
+    max_tokens: 1500,
+  });
 
-  while (attempts < 3) {
-    attempts += 1;
-    console.log(`Fireworks API call attempt ${attempts}`);
+  const rawContent = response.choices[0]?.message?.content || "";
+  const content = rawContent.trim();
 
-    const response = await client.chat.completions.create({
-      model: "accounts/fireworks/models/llama-v3p1-8b-instruct",
-      messages: [
-        {
-          role: "user",
-          content: basePrompt,
-        },
-      ],
-      max_tokens: 1500,
-    });
-
-    const rawContent = response.choices[0]?.message?.content || "";
-    const content = rawContent.trim();
-    lastContent = content;
-
-    if (!content) {
-      console.warn("Empty response content from Fireworks; retrying...");
-      continue;
-    }
-
-    // Handle possible prefixes and extract JSON
-    let status = "GOOD RESULT";
-    let rest = content;
-
-    if (rest.startsWith("GOOD RESULT")) {
-      status = "GOOD RESULT";
-      rest = rest.replace(/^GOOD RESULT\s*/i, "");
-    } else if (rest.startsWith("NOT ENOUGH CONTEXT") || rest.startsWith("NOT ENOUGH TEXT")) {
-      // Treat NOT ENOUGH CONTEXT / TEXT as a success status
-      status = "NOT ENOUGH CONTEXT";
-      rest = rest.replace(/^NOT ENOUGH CONTEXT\s*|^NOT ENOUGH TEXT\s*/i, "");
-    } else if (rest.startsWith("NOT FINAL RESULT")) {
-      status = "NOT FINAL RESULT";
-      rest = rest.replace(/^NOT FINAL RESULT\s*/i, "");
-      if (attempts < 3) {
-        console.log('Model indicated "NOT FINAL RESULT". Retrying...');
-        continue;
-      }
-      // On the 3rd attempt, fall through and try to use whatever is returned.
-    }
-
-    const firstBrace = rest.indexOf("{");
-    const lastBrace = rest.lastIndexOf("}");
-    const beforeJson = firstBrace === -1 ? rest : rest.slice(0, firstBrace).trim();
-    const afterJson = lastBrace === -1 ? "" : rest.slice(lastBrace + 1).trim();
-    const outsideJsonText = [beforeJson, afterJson].filter(Boolean).join(" ");
-
-    const normalizeReason = (text) => {
-      if (!text) return "";
-      const words = text.split(/\s+/).filter(Boolean);
-      if (words.length > 150) {
-        return words.slice(0, 150).join(" ");
-      }
-      return words.join(" ");
-    };
-
-    let parsed = null;
-
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      const jsonText = rest.slice(firstBrace, lastBrace + 1);
-      try {
-        parsed = JSON.parse(jsonText);
-      } catch (err) {
-        console.warn("Failed to parse JSON from model output; will fall back to reason-only.", err.message);
-        parsed = null;
-      }
-    }
-
-    // If we got valid JSON, enrich it with a reason and return
-    if (parsed && typeof parsed === "object") {
-      // Enforce one pathResult element
-      if (Array.isArray(parsed.pathResult) && parsed.pathResult.length > 1) {
-        parsed.pathResult = [parsed.pathResult[0]];
-      }
-
-      if (!Array.isArray(parsed.pathResult) || parsed.pathResult.length === 0) {
-        console.warn("Parsed JSON has empty or missing pathResult; treating as reason-only result.");
-        parsed.pathResult = [];
-      }
-
-      let reason =
-        typeof parsed.reason === "string" && parsed.reason.trim()
-          ? parsed.reason
-          : outsideJsonText ||
-            (status === "NOT ENOUGH CONTEXT"
-              ? "The model reported limited context when generating this schedule; details may be incomplete."
-              : "Schedule generated based on the available context.");
-
-      parsed.reason = normalizeReason(reason);
-      return { status, data: parsed };
-    }
-
-    // No usable JSON: still return a structured JSON with a reason
-    const reasonText =
-      outsideJsonText ||
-      content ||
-      "Model could not generate a structured schedule with the given context.";
-    const reason = normalizeReason(reasonText);
-
+  if (!content) {
+    console.warn("Empty response content from Fireworks; using fallback schedule.");
     return {
-      status,
+      status: "LACK INFO",
       data: {
-        reason,
-        pathResult: [],
+        reason: "Empty response from model; using fallback schedule at Grainger Library and ECEB.",
+        pathResult: [buildGraingerFallbackPath()],
       },
     };
   }
 
-  // After 3 attempts, fallback JSON
+  // Handle possible prefixes and extract JSON
+  let status = "GOOD RESULT";
+  let rest = content;
+
+  if (rest.startsWith("GOOD RESULT")) {
+    status = "GOOD RESULT";
+    rest = rest.replace(/^GOOD RESULT\s*/i, "");
+  } else if (rest.startsWith("LACK INFO")) {
+    status = "LACK INFO";
+    rest = rest.replace(/^LACK INFO\s*/i, "");
+  } else {
+    // If the model did not obey the flag rule, treat it as LACK INFO.
+    status = "LACK INFO";
+  }
+
+  const firstBrace = rest.indexOf("{");
+  const lastBrace = rest.lastIndexOf("}");
+  const beforeJson = firstBrace === -1 ? rest : rest.slice(0, firstBrace).trim();
+  const afterJson = lastBrace === -1 ? "" : rest.slice(lastBrace + 1).trim();
+  const outsideJsonText = [beforeJson, afterJson].filter(Boolean).join(" ");
+
+  const normalizeReason = (text) => {
+    if (!text) return "";
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length > 150) {
+      return words.slice(0, 150).join(" ");
+    }
+    return words.join(" ");
+  };
+
+  let parsed = null;
+
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    const jsonText = rest.slice(firstBrace, lastBrace + 1);
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (err) {
+      console.warn("Failed to parse JSON from model output; will fall back to Grainger/ECEB.", err.message);
+      parsed = null;
+    }
+  }
+
+  // If we got valid JSON, enrich it with a reason and return
+  if (parsed && typeof parsed === "object") {
+    if (!Array.isArray(parsed.pathResult) || parsed.pathResult.length === 0) {
+      console.warn("Parsed JSON has empty or missing pathResult; using fallback schedule.");
+      parsed.pathResult = [buildGraingerFallbackPath()];
+    }
+
+    let reason =
+      typeof parsed.reason === "string" && parsed.reason.trim()
+        ? parsed.reason
+        : outsideJsonText ||
+          (status === "LACK INFO"
+            ? "The model reported limited context; using a simplified schedule at Grainger Library and ECEB."
+            : "Schedule generated based on the available context.");
+
+    parsed.reason = normalizeReason(reason);
+    return { status, data: parsed };
+  }
+
+  // No usable JSON: return fallback with reason
   const fallbackReason =
-    lastContent || "Model did not return a usable schedule after multiple attempts.";
+    outsideJsonText ||
+    content ||
+    "Model could not generate a structured schedule; using fallback at Grainger Library and ECEB.";
+
   return {
-    status: "FAILED",
+    status: "LACK INFO",
     data: {
-      reason: fallbackReason,
-      pathResult: [],
+      reason: normalizeReason(fallbackReason),
+      pathResult: [buildGraingerFallbackPath()],
     },
   };
 }
@@ -296,6 +302,94 @@ app.get('/api/fireworks-test', async (req, res) => {
   } catch (error) {
     console.error("Fireworks API test error:", error.message);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// LLM schedule generation endpoint: calls three different models and returns three options
+app.post('/api/llm-schedules', async (req, res) => {
+  try {
+    const { userRequest, date } = req.body || {};
+
+    const promptArgs = {
+      userProfile: '{{user_profile_block}}',
+      events: '{{events_block}}',
+      buildings: '{{buildings_block}}',
+      transit: '{{transit_block}}',
+      weather: '{{weather_block}}',
+      userRequest: userRequest || '{{user_request}}',
+      targetDate: date || '{{target_date}}',
+    };
+
+    const models = [
+      {
+        id: 1,
+        modelId: "accounts/fireworks/models/deepseek-v3p1",
+        modelName: "DeepSeek v3.1",
+      },
+      {
+        id: 2,
+        modelId: "accounts/fireworks/models/qwen2p5-vl-32b-instruct",
+        modelName: "Qwen3 VL 30B A3B Instruct",
+      },
+      {
+        id: 3,
+        modelId: "accounts/fireworks/models/llama-v3p3-70b-instruct",
+        modelName: "Llama v3.3 70B Instruct",
+      },
+    ];
+
+    const options = await Promise.all(
+      models.map(async (m) => {
+        try {
+          const { status, data } = await callFireworksAPI({
+            model: m.modelId,
+            promptArgs,
+          });
+
+          const firstPath =
+            Array.isArray(data.pathResult) && data.pathResult[0]
+              ? data.pathResult[0]
+              : null;
+
+          const effectivePath =
+            firstPath && Array.isArray(firstPath.schedule) && firstPath.schedule.length > 0
+              ? firstPath
+              : buildGraingerFallbackPath(`Option ${m.id}: Grainger Library 2F`);
+
+          return {
+            id: m.id,
+            modelId: m.modelId,
+            modelName: m.modelName,
+            status,
+            reason: data.reason || "",
+            title: effectivePath.title || `Option ${m.id}`,
+            schedule: effectivePath.schedule || [],
+            isFallback: !!effectivePath.fallback,
+          };
+        } catch (err) {
+          console.error(`LLM call failed for model ${m.modelId}:`, err);
+          const fallbackPath = buildGraingerFallbackPath(`Option ${m.id}: Grainger Library 2F`);
+          return {
+            id: m.id,
+            modelId: m.modelId,
+            modelName: m.modelName,
+            status: "FAILED",
+            reason:
+              err && typeof err.message === "string"
+                ? err.message
+                : "Failed to generate schedule; using fallback at Grainger Library.",
+            title: fallbackPath.title,
+            schedule: fallbackPath.schedule,
+            isFallback: true,
+          };
+        }
+      }),
+    );
+
+    res.json({ success: true, options });
+  } catch (error) {
+    console.error("Error in /api/llm-schedules:", error);
+    res.status(500).json({ success: false, error: "server_error" });
   }
 });
 

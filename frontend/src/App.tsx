@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { saveHistory } from './api/histories';
+import { generateSchedulesWithLlm } from './api/llm';
 import { Header } from './components/Header';
 import { MainContent } from './components/MainContent';
 import { LoginPage } from './components/LoginPage';
@@ -18,6 +19,11 @@ interface PathOption {
   id: number;
   title: string;
   schedule: ScheduleItem[];
+  modelName?: string;
+  modelId?: string;
+  status?: string;
+  reason?: string;
+  isFallback?: boolean;
 }
 
 interface SearchHistoryEntry {
@@ -104,81 +110,33 @@ export default function App() {
     }
   };
 
-  const handleGeneratePaths = (userRequest: string, date: string) => {
+  const handleGeneratePaths = async (userRequest: string, date: string) => {
     setShowRestore(false);
     setCurrentUserRequest(userRequest);
     setCurrentRequestedDate(date);
-    // Generate 3 path options
-    const paths: PathOption[] = [
-      {
-        id: 1,
-        title: 'Path Option 1: Productive Study Day',
-        schedule: (() => {
-          const locs = generateRandomLocations(6);
-          const activities = [
-            'Breakfast & Review',
-            'Class - Data Structures',
-            'Group Study Session',
-            'Lunch Break',
-            'Library Study',
-            'Gym Workout'
-          ];
-          const times = ['08:00', '09:30', '11:00', '13:00', '14:30', '17:00'];
-          return locs.map((loc, i) => ({
-            time: times[i],
-            location: loc.name,
-            activity: activities[i],
-            coordinates: { lat: loc.lat, lng: loc.lng }
-          }));
-        })()
-      },
-      {
-        id: 2,
-        title: 'Path Option 2: Balanced Schedule',
-        schedule: (() => {
-          const locs = generateRandomLocations(6);
-          const activities = [
-            'Breakfast',
-            'Lab Session',
-            'Office Hours',
-            'Lunch & Rest',
-            'Project Team Meeting',
-            'Dinner & Social'
-          ];
-          const times = ['08:30', '10:00', '12:00', '13:30', '15:30', '18:00'];
-          return locs.map((loc, i) => ({
-            time: times[i],
-            location: loc.name,
-            activity: activities[i],
-            coordinates: { lat: loc.lat, lng: loc.lng }
-          }));
-        })()
-      },
-      {
-        id: 3,
-        title: 'Path Option 3: Flexible Arrangement',
-        schedule: (() => {
-          const locs = generateRandomLocations(6);
-          const activities = [
-            'Online Class',
-            'Coffee & Reading',
-            'Career Fair',
-            'Lunch',
-            'Lab Work',
-            'Student Org Activity'
-          ];
-          const times = ['09:00', '11:00', '13:00', '14:00', '15:30', '19:00'];
-          return locs.map((loc, i) => ({
-            time: times[i],
-            location: loc.name,
-            activity: activities[i],
-            coordinates: { lat: loc.lat, lng: loc.lng }
-          }));
-        })()
+    try {
+      const resp = await generateSchedulesWithLlm(userRequest, date);
+      if (resp.success && Array.isArray(resp.options) && resp.options.length > 0) {
+        const mapped: PathOption[] = resp.options.map(opt => ({
+          id: opt.id,
+          title: opt.title,
+          schedule: opt.schedule as ScheduleItem[],
+          modelName: opt.modelName,
+          modelId: opt.modelId,
+          status: opt.status,
+          reason: opt.reason,
+          isFallback: opt.isFallback,
+        }));
+        setPathOptions(mapped);
+      } else {
+        // fallback: clear options if nothing came back
+        setPathOptions([]);
       }
-    ];
-    setPathOptions(paths);
-    // Do NOT save yet — only save when the user selects one option.
+    } catch (err) {
+      console.error('LLM schedule generation failed', err);
+      // fallback: clear options; frontend will show empty state
+      setPathOptions([]);
+    }
   };
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);

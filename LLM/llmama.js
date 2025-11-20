@@ -58,7 +58,7 @@ Return ONLY a single JSON object with this exact structure, no extra text:
 {
   "reason": "string (3-150 words) explaining how you built this schedule or why context was limited",
   "pathResult": [
-    {
+        {
       "title": "string",
       "schedule": [
         {
@@ -77,15 +77,25 @@ Do not include comments outside the JSON. Do not change property names.
 If you cannot find coordinates for a building, omit that schedule item
 and choose another building from CONTEXT instead of guessing.
 [CAUTION]
-If you feel you cannot satisfy the user's request with the given CONTEXT,
-YOU should print "NOT FINAL RESULT" instead of the JSON at the very beginning. Our system will ask
-you for detail plan afterward. IF you do this the third time, you will must eventually have
-to print out the JSON using random data here but print "NOT ENOUGH CONTEXT" in front of the JSON.
-ELSE, you must print "GOOD RESULT".  All 3 flags must be at the VERY BEGINNING of all other output.
+Every response MUST start with exactly one of these flags, followed immediately by the JSON object:
+- "GOOD RESULT"
+- "LACK INFO"
+
+If you are satisfied that you can follow the user's request with the given CONTEXT, print
+"GOOD RESULT" and then return the JSON schedule described above.
+
+If you feel you cannot fully satisfy the user's request with the given CONTEXT, print
+"LACK INFO" and then return a JSON schedule that describes a simple fallback plan where:
+- The user studies all day at Grainger Library on the requested date from 13:00 to 23:00, and
+- Then sleeps at ECEB (ECE Building) from 23:00 to 09:00.
+
+You must ALWAYS return a JSON object in the specified format, even when the flag is "LACK INFO".
+The flag ("GOOD RESULT" or "LACK INFO") must be at the VERY BEGINNING of all other output.
+The first word you output should be one of them, then followed by json output, NO ANY OTHER CONTENT or thinking output,
+ which may cause our systems to fail.
 `;
 }
 
 module.exports = {
   buildFireworksPrompt,
 };
-

@@ -6,8 +6,8 @@ UIPathFinder is a web app that helps UIUC students plan their day as a sequence 
 
 The current version focuses on:
 - A full user flow (Auth0 login → main planner → history).
-- A deterministic “mock” schedule generator in the frontend.
-- A first LLM integration against Fireworks.ai with a reusable prompt and output schema (`reason` + `pathResult`).
+- LLM-based schedule generation via Fireworks.ai with three models.
+- A robust output contract: every model returns a JSON schedule plus a textual `reason`, with a consistent fallback if context is insufficient.
 
 ---
 
@@ -56,12 +56,15 @@ The current version focuses on:
   - Node.js / Express
   - MongoDB models for `user` and `history`
   - REST API consumed by the frontend via `src/api/histories.ts`
-  - Fireworks.ai LLM integration (via the `openai` client) using a Llama-based model
+  - Fireworks.ai LLM integration (via the `openai` client) using multiple models
 
 - **LLM / Prompting**
   - Central prompt builder in `LLM/llmama.js`
-  - Prototype LLM caller + JSON post-processing in `backend/index.js` (`callFireworksAPI`)
-  Models Using (To be implemented): qwen3-32b, llama-v3p1-8b-instruct, FalconH1
+  - LLM caller + JSON post-processing in `backend/index.js` (`callFireworksAPI`, `/api/llm-schedules`)
+  - Models currently used (on Fireworks.ai):
+    - `accounts/fireworks/models/deepseek-v3p1` (DeepSeek v3.1)
+    - `accounts/fireworks/models/qwen3-30b-a3b-instruct` (Qwen3 30B-A3B Instruct)
+    - `accounts/fireworks/models/llama-v3p3-70b-instruct` (Llama v3.3 70B Instruct)
 
 
 ---
@@ -91,9 +94,28 @@ The current version focuses on:
       ```json
       {
         "success": true,
-        "status": "GOOD RESULT" | "NOT ENOUGH CONTEXT" | "NOT FINAL RESULT" | "FAILED",
+        "status": "GOOD RESULT" | "LACK INFO",
         "reason": "short explanation (3–150 words)",
-        "pathResult": [ /* schedule items or empty */ ]
+        "pathResult": [ /* schedule items, or fallback */ ]
+      }
+      ```
+  - Provides a multi-model LLM endpoint:
+    - `POST /api/llm-schedules` → given `{ userRequest, date }`, calls the three models above and returns:
+      ```json
+      {
+        "success": true,
+        "options": [
+          {
+            "id": 1,
+            "modelId": "accounts/fireworks/models/deepseek-v3p1",
+            "modelName": "DeepSeek v3.1",
+            "status": "GOOD RESULT" | "LACK INFO",
+            "reason": "why this schedule was created or why context is limited",
+            "title": "string",
+            "schedule": [ { "time": "13:00", "location": "Grainger Library 2F", ... } ],
+            "isFallback": true
+          }
+        ]
       }
       ```
 
@@ -109,36 +131,36 @@ The current version focuses on:
 This project includes an early LLM integration to experiment with schedule generation before the full RAG pipeline is wired up.
 
 - **Prompt Contract**
-  - Model is instructed to:
-    - Create exactly one schedule (a “path”) for the given day.
-    - Return a single JSON object with:
-      - `reason`: 3–150 word explanation of how the schedule was built or why context is limited.
-      - `pathResult`: array with at most one element, each containing a `title` and a `schedule` array of `{ time, location, activity, coordinates, notes }`.
-    - Use one of three leading flags in raw text:
-      - `GOOD RESULT` → schedule is acceptable.
-      - `NOT FINAL RESULT` → model isn’t ready; backend will retry up to 3 times.
-      - `NOT ENOUGH CONTEXT` → schedule may be incomplete, but is still treated as a “success” with an explanatory `reason`.
+  - For each request, the backend builds a prompt with:
+    - System role + planning rules.
+    - Context placeholders (user profile, events, buildings, transit, weather).
+    - Strict JSON schema:
+      - `reason`: 3–150 word explanation of how the schedule was built or why context was limited.
+      - `pathResult`: array with a single object `{ title, schedule: ScheduleItem[] }`.
+    - Two leading flags:
+      - `"GOOD RESULT"` → model believes it satisfied the request with given context.
+      - `"LACK INFO"` → model believes context is insufficient.
+  - The model must always:
+    - Start with either `GOOD RESULT` or `LACK INFO`.
+    - Immediately output a JSON object in the specified format.
+    - When using `LACK INFO`, describe a simple fallback schedule:
+      - Study at Grainger Library 2F from 13:00–23:00.
+      - Sleep at ECEB from 23:00–09:00.
 
 - **Backend Post-Processing**
-  - Strips the leading flag, extracts the JSON block, and parses it.
-  - Ensures:
-    - `pathResult` exists; if more than one path is returned, only the first is kept.
-    - A `reason` field is always present and truncated to ~150 words.
-    - If no usable JSON is returned, the backend falls back to:
-      ```json
-      {
-        "status": "FAILED" | "NOT ENOUGH CONTEXT",
-        "data": {
-          "reason": "model explanation / error text",
-          "pathResult": []
-        }
-      }
-      ```
+  - Makes a single call per model (no retries).
+  - Parses the leading flag (`GOOD RESULT` or `LACK INFO`); if missing, treats it as `LACK INFO`.
+  - Extracts the JSON block, parses it, and ensures:
+    - `pathResult` exists; if missing/empty, substitutes a fallback:
+      - Title “Fallback: Grainger Library + ECEB”.
+      - Two stops: Grainger Library 2F (13:00–23:00) and ECE Building (23:00–09:00).
+    - `reason` is present and truncated to ~150 words.
+  - If JSON parsing fails entirely, also falls back to the same Grainger+ECEB schedule and sets `status: "LACK INFO"`.
   - The `/api/fireworks-test` route surfaces this as:
     ```json
     {
       "success": true,
-      "status": "...",
+      "status": "GOOD RESULT" | "LACK INFO",
       "reason": "...",
       "pathResult": [ ... ]
     }
@@ -235,4 +257,4 @@ Planned components:
 
 ## Summary
 
-UIPathFinder already supports login, schedule generation (deterministic mock paths), and history management with a clean UI. On the backend, a prototype LLM pipeline (via Fireworks.ai + Llama and a centralized prompt in `LLM/llmama.js`) is in place to experiment with JSON-based schedule generation and reliability flags. The next iterations will focus on wiring real RAG context (MongoDB data, UIUC MTD, weather, building DB) into that pipeline so the suggested paths are grounded in live campus information.***
+UIPathFinder already supports login, LLM-backed schedule generation (with three Fireworks models), interactive route maps, and history management with a clean UI. On the backend, a prompt-driven LLM pipeline (centralized in `LLM/llmama.js` and `backend/index.js`) enforces a strict JSON schema and two reliability flags (`GOOD RESULT` / `LACK INFO`), always returning a usable schedule (or a Grainger+ECEB fallback) plus a human-readable `reason`. The next iterations will focus on wiring real RAG context (MongoDB data, UIUC MTD, weather, building DB) into that pipeline so the suggested paths are grounded in live campus information.

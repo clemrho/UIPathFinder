@@ -48,14 +48,23 @@ function getBounds(locations: Location[]) {
 
 export function RouteMap({ locations, pathId }: RouteMapProps) {
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
-  const [trafficData] = useState(() => {
-    // 为每个路段生成随机交通状态
-    const trafficLevels = ['light', 'moderate', 'heavy'];
-    return locations.slice(0, -1).map(() => ({
-      status: trafficLevels[Math.floor(Math.random() * trafficLevels.length)],
-      duration: Math.floor(Math.random() * 10 + 5)
-    }));
-  });
+  // If there are fewer than 2 locations, there is no route to draw.
+  if (!locations || locations.length < 2) {
+    return (
+      <div className="mt-4">
+        <div className="w-full h-[200px] rounded-lg border border-gray-200 flex items-center justify-center bg-gray-50 text-sm text-gray-500">
+          Not enough stops to draw a route.
+        </div>
+      </div>
+    );
+  }
+
+  // 为每个路段生成交通状态（基于当前 locations 重新计算，避免与旧状态不一致）
+  const trafficLevels = ['light', 'moderate', 'heavy'] as const;
+  const trafficData = locations.slice(0, -1).map((_, index) => ({
+    status: trafficLevels[index % trafficLevels.length],
+    duration: Math.floor(Math.random() * 10 + 5)
+  }));
 
   const zoom = 14;
   const width = 800;
