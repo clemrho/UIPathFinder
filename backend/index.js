@@ -2,26 +2,30 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const jwksRsa = require('jwks-rsa');
 const { buildFireworksPrompt } = require('../LLM/llmama');
-
-const User = require('./models/user');
-const History = require('./models/history');
+const {
+  initDb,
+  getUserByAuth0Sub,
+  upsertUser,
+  createHistory,
+  listHistoriesByUser,
+  getHistoryById,
+} = require('./sqlite');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// MongoDB connection
-const mongoUri =
-  process.env.MONGODB_URI || 'mongodb://localhost:27017/uipathfinder';
-mongoose
-  .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// SQLite initialization
+initDb()
+  .then(() => console.log('SQLite database initialized'))
+  .catch((err) => {
+    console.error('SQLite initialization error:', err);
+    process.exit(1);
+  });
 
 // Auth0 JWT verification using jwks-rsa + jsonwebtoken
 const jwksClient = jwksRsa({
@@ -71,19 +75,19 @@ app.post('/api/histories', checkJwt, async (req, res) => {
     // Upsert user
     const email = authPayload.email || req.body.email || null;
     const name = authPayload.name || req.body.name || null;
-    let user = await User.findOne({ auth0Sub });
+    let user = await getUserByAuth0Sub(auth0Sub);
     if (!user) {
-      user = await User.create({ auth0Sub, email, name });
+      user = await upsertUser({ auth0Sub, email, name });
     }
 
     const { title, subtitle, userRequest, requestedDate, metadata, pathOptions } =
       req.body;
-    const history = await History.create({
-      user: user._id,
+    const history = await createHistory({
+      userId: user.id,
       title: title || userRequest || '',
       subtitle: subtitle || '',
       userRequest,
-      requestedDate: requestedDate ? new Date(requestedDate) : undefined,
+      requestedDate: requestedDate || null,
       metadata: metadata || {},
       pathOptions: Array.isArray(pathOptions) ? pathOptions : []
     });
@@ -103,20 +107,14 @@ app.get('/api/histories', checkJwt, async (req, res) => {
     const auth0Sub = authPayload && authPayload.sub;
     if (!auth0Sub) return res.status(401).json({ error: 'Unauthorized' });
 
-    const user = await User.findOne({ auth0Sub });
+    const user = await getUserByAuth0Sub(auth0Sub);
     if (!user) return res.json([]);
 
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
 
-    const rows = await History.find({ user: user._id })
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .select('-__v')
-      .lean();
-
-    res.json(rows);
+    const rows = await listHistoriesByUser(user.id, { limit, offset });
+    res.json(rows || []);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'server_error' });
@@ -130,13 +128,9 @@ app.get('/api/histories/:id', checkJwt, async (req, res) => {
     const auth0Sub = authPayload && authPayload.sub;
     if (!auth0Sub) return res.status(401).json({ error: 'Unauthorized' });
 
-    const user = await User.findOne({ auth0Sub });
+    const user = await getUserByAuth0Sub(auth0Sub);
     if (!user) return res.status(404).json({ error: 'Not found' });
-
-    const history = await History.findOne({
-      _id: req.params.id,
-      user: user._id
-    }).lean();
+    const history = await getHistoryById(req.params.id, user.id);
     if (!history) return res.status(404).json({ error: 'Not found' });
 
     res.json(history);

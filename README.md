@@ -54,7 +54,7 @@ The current version focuses on:
 
 - **Backend**
   - Node.js / Express
-  - MongoDB models for `user` and `history`
+  - SQLite database for `users` and `histories` (via `backend/sqlite.js`)
   - REST API consumed by the frontend via `src/api/histories.ts`
   - Fireworks.ai LLM integration (via the `openai` client) using multiple models
 
@@ -83,8 +83,8 @@ The current version focuses on:
   - `src/components/SearchHistoryPage.tsx`: grouped-by-date history list with restore behavior.
 
 - **Backend App**
-  - `backend/index.js`: Express server and API wiring.
-  - `backend/models/user.js`, `backend/models/history.js`: Mongoose models.
+  - `backend/index.js`: Express server, JWT auth, SQLite wiring, and LLM orchestration.
+  - `backend/sqlite.js`: SQLite helpers and schema (`users`, `histories`).
   - Exposes endpoints used by `frontend/src/api/histories.ts`:
     - Save a selected plan.
     - List histories.
