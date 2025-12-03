@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
+import { listHistories, getHistory } from '../api/histories';
 import { MapPin, ArrowLeft } from 'lucide-react';
 
 interface ScheduleItem {
@@ -20,17 +22,62 @@ interface SearchHistoryEntry {
   userRequest: string;
   date: string;
   pathOptions: PathOption[];
+  title?: string;
+  subtitle?: string;
 }
 
 interface SearchHistoryPageProps {
   onBack: () => void;
-  searchHistory: SearchHistoryEntry[];
+  // optional local fallback (used when not authenticated or for demo)
+  searchHistory?: SearchHistoryEntry[];
   onRestoreSearch: (entry: SearchHistoryEntry) => void;
 }
 
 export function SearchHistoryPage({ onBack, searchHistory, onRestoreSearch }: SearchHistoryPageProps) {
+  const { isAuthenticated, getAccessTokenSilently } = useAuth0();
+  const [histories, setHistories] = useState<SearchHistoryEntry[]>(searchHistory || []);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      // if user is authenticated, fetch from backend; otherwise use provided prop
+      if (isAuthenticated && typeof getAccessTokenSilently === 'function') {
+        setLoading(true);
+        setError(null);
+        try {
+          const rows = await listHistories(getAccessTokenSilently, { limit: 50, offset: 0 });
+          if (!mounted) return;
+          // Normalize timestamps to Date objects
+          const mapped: SearchHistoryEntry[] = rows.map((r: any) => ({
+            id: r._id || r.id,
+            timestamp: r.createdAt ? new Date(r.createdAt) : new Date(),
+            userRequest: r.userRequest || r.user_request || '',
+            date: r.requestedDate || '',
+            pathOptions: (r.pathOptions || r.path_options || []).map((p: any, idx: number) => ({
+              id: idx,
+              title: p.title,
+              schedule: p.schedule || []
+            }))
+          }));
+          setHistories(mapped);
+        } catch (err: any) {
+          console.error('Failed to load histories', err);
+          setError(err?.message || 'Failed to load histories');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // use provided prop fallback
+        setHistories(searchHistory || []);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [isAuthenticated, getAccessTokenSilently, searchHistory]);
   // Group entries by date
-  const groupedByDate = searchHistory.reduce((acc, entry) => {
+  const groupedByDate = histories.reduce((acc, entry) => {
     const dateKey = entry.timestamp.toISOString().split('T')[0];
     if (!acc[dateKey]) {
       acc[dateKey] = [];
@@ -74,28 +121,7 @@ export function SearchHistoryPage({ onBack, searchHistory, onRestoreSearch }: Se
     });
   };
 
-  const getFirstTwoLocations = (entry: SearchHistoryEntry): string[] => {
-    // Get the first two unique locations from the first path option
-    if (entry.pathOptions.length === 0 || entry.pathOptions[0].schedule.length === 0) {
-      return [];
-    }
-    
-    const locations: string[] = [];
-    const seenLocations = new Set<string>();
-    
-    for (const item of entry.pathOptions[0].schedule) {
-      if (!seenLocations.has(item.location)) {
-        seenLocations.add(item.location);
-        locations.push(item.location);
-        
-        if (locations.length === 2) {
-          break;
-        }
-      }
-    }
-    
-    return locations;
-  };
+  
 
   return (
     <div 
@@ -136,7 +162,11 @@ export function SearchHistoryPage({ onBack, searchHistory, onRestoreSearch }: Se
           {/* Content */}
           <div className="p-6">
             <div className="space-y-8">
-              {searchHistory.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-12 text-gray-500">Loading history…</div>
+              ) : error ? (
+                <div className="text-center py-12 text-red-500">{error}</div>
+              ) : histories.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <p>No search history yet</p>
                   <p className="text-sm mt-2">Generate some schedules to see them here</p>
@@ -151,34 +181,46 @@ export function SearchHistoryPage({ onBack, searchHistory, onRestoreSearch }: Se
                       </h2>
                       <div className="space-y-2">
                         {entries.map((entry) => {
-                          const firstTwoLocations = getFirstTwoLocations(entry);
+                          const subtitle = (entry.pathOptions && entry.pathOptions[0] && entry.pathOptions[0].schedule)
+                            ? entry.pathOptions[0].schedule.map(s => s.location).join(' → ')
+                            : '';
                           return (
                             <div
                               key={entry.id}
                               className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                              onClick={() => onRestoreSearch(entry)}
+                              onClick={async () => {
+                                // fetch full history details from backend if authenticated
+                                if (isAuthenticated && typeof getAccessTokenSilently === 'function') {
+                                  try {
+                                    const full = await getHistory(getAccessTokenSilently, entry.id);
+                                    // normalize and pass to restore
+                                    const normalized: SearchHistoryEntry = {
+                                      id: full._id || full.id,
+                                      timestamp: full.createdAt ? new Date(full.createdAt) : new Date(),
+                                      userRequest: full.userRequest || full.user_request || '',
+                                      date: full.requestedDate || '',
+                                      pathOptions: (full.pathOptions || full.path_options || []).map((p: any, idx: number) => ({ id: idx, title: p.title, schedule: p.schedule || [] }))
+                                    };
+                                    onRestoreSearch(normalized);
+                                  } catch (err) {
+                                    console.error('Failed to load history', err);
+                                  }
+                                } else {
+                                  onRestoreSearch(entry);
+                                }
+                              }}
                             >
                               <div className="text-gray-700 min-w-[80px] pt-1">
                                 {formatTime(entry.timestamp)}
                               </div>
                               <MapPin className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
                               <div className="flex-1">
-                                <div className="text-gray-900 leading-relaxed">
-                                  {firstTwoLocations.length > 0 && (
-                                    <>
-                                      {firstTwoLocations[0]}
-                                      {firstTwoLocations.length > 1 && (
-                                        <>
-                                          {' → '}
-                                          {firstTwoLocations[1]}
-                                        </>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                                <div className="text-sm text-gray-600 mt-1">
-                                  {entry.userRequest}
-                                </div>
+                                  <div className="font-bold text-lg noto-sans-uniquifier text-gray-900 leading-relaxed">
+                                    {entry.title || entry.userRequest}
+                                  </div>
+                                  <div className="text-sm noto-sans-uniquifier text-gray-600 mt-1">
+                                    {entry.subtitle || subtitle}
+                                  </div>
                               </div>
                             </div>
                           );
