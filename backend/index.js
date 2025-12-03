@@ -16,10 +16,12 @@ app.use(express.json());
 app.use(morgan('dev'));
 
 // MongoDB connection
-const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/uipathfinder';
-mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+const mongoUri =
+  process.env.MONGODB_URI || 'mongodb://localhost:27017/uipathfinder';
+mongoose
+  .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch((err) => console.error('MongoDB connection error:', err));
 
 // Auth0 JWT verification using jwks-rsa + jsonwebtoken
 const jwksClient = jwksRsa({
@@ -38,7 +40,8 @@ function getKey(header, callback) {
 
 function checkJwt(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'missing_token' });
+  if (!authHeader || !authHeader.startsWith('Bearer '))
+    return res.status(401).json({ error: 'missing_token' });
   const token = authHeader.split(' ')[1];
   const audience = process.env.AUTH0_AUDIENCE || 'urn:uipathfinder-api';
   const issuer = `https://${process.env.AUTH0_DOMAIN}/`;
@@ -73,7 +76,8 @@ app.post('/api/histories', checkJwt, async (req, res) => {
       user = await User.create({ auth0Sub, email, name });
     }
 
-    const { title, subtitle, userRequest, requestedDate, metadata, pathOptions } = req.body;
+    const { title, subtitle, userRequest, requestedDate, metadata, pathOptions } =
+      req.body;
     const history = await History.create({
       user: user._id,
       title: title || userRequest || '',
@@ -129,7 +133,10 @@ app.get('/api/histories/:id', checkJwt, async (req, res) => {
     const user = await User.findOne({ auth0Sub });
     if (!user) return res.status(404).json({ error: 'Not found' });
 
-    const history = await History.findOne({ _id: req.params.id, user: user._id }).lean();
+    const history = await History.findOne({
+      _id: req.params.id,
+      user: user._id
+    }).lean();
     if (!history) return res.status(404).json({ error: 'Not found' });
 
     res.json(history);
@@ -154,17 +161,60 @@ function buildGraingerFallbackPath(title) {
         location: 'Grainger Library 2F',
         activity: 'Study at Grainger Library from 13:00 to 23:00.',
         coordinates: { ...GRAINGER_COORDS },
-        notes: 'no where to go, sleep at grainger 2F.',
+        notes: 'no where to go, sleep at grainger 2F.'
       },
       {
         time: '23:00',
         location: 'ECE Building (ECEB)',
         activity: 'Sleep at ECEB from 23:00 to 09:00.',
         coordinates: { ...ECEB_COORDS },
-        notes: 'no where to go, sleep at grainger 2F.',
-      },
-    ],
+        notes: 'no where to go, sleep at grainger 2F.'
+      }
+    ]
   };
+}
+
+/**
+ * ⭐ New: get driving route between two coordinates using OSRM demo server
+ * Returns an array of { lat, lng } along the road.
+ */
+async function getDrivingRoute(startCoords, endCoords) {
+  try {
+    if (
+      !startCoords ||
+      !endCoords ||
+      typeof startCoords.lat !== 'number' ||
+      typeof startCoords.lng !== 'number' ||
+      typeof endCoords.lat !== 'number' ||
+      typeof endCoords.lng !== 'number'
+    ) {
+      return [];
+    }
+
+    const start = `${startCoords.lng},${startCoords.lat}`;
+    const end = `${endCoords.lng},${endCoords.lat}`;
+
+    const url =
+      `http://router.project-osrm.org/route/v1/driving/` +
+      `${start};${end}?overview=full&geometries=geojson&steps=false`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn('OSRM request failed with status', resp.status);
+      return [];
+    }
+
+    const data = await resp.json();
+    if (!data.routes || !data.routes[0] || !data.routes[0].geometry) {
+      return [];
+    }
+
+    const coords = data.routes[0].geometry.coordinates; // [ [lng,lat], ... ]
+    return coords.map(([lng, lat]) => ({ lat, lng }));
+  } catch (err) {
+    console.warn('OSRM error:', err.message || err);
+    return [];
+  }
 }
 
 /**
@@ -172,19 +222,19 @@ function buildGraingerFallbackPath(title) {
  * This uses dynamic import() for the ESM-only 'openai' package.
  */
 async function callFireworksAPI({
-  model = "accounts/fireworks/models/llama-v3p3-70b-instruct",
-  promptArgs,
+  model = 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+  promptArgs
 } = {}) {
   // Dynamically import the openai library
   const { default: OpenAI } = await import('openai');
 
   if (!process.env.FIREWORKS_API_KEY) {
-    throw new Error("FIREWORKS_API_KEY environment variable is not set.");
+    throw new Error('FIREWORKS_API_KEY environment variable is not set.');
   }
 
   const client = new OpenAI({
     apiKey: process.env.FIREWORKS_API_KEY,
-    baseURL: "https://api.fireworks.ai/inference/v1",
+    baseURL: 'https://api.fireworks.ai/inference/v1'
   });
 
   // For now we call the prompt builder with default placeholder blocks.
@@ -196,55 +246,56 @@ async function callFireworksAPI({
     model,
     messages: [
       {
-        role: "user",
-        content: basePrompt,
-      },
+        role: 'user',
+        content: basePrompt
+      }
     ],
-    max_tokens: 1500,
+    max_tokens: 1500
   });
 
-  const rawContent = response.choices[0]?.message?.content || "";
+  const rawContent = response.choices[0]?.message?.content || '';
   const content = rawContent.trim();
 
   if (!content) {
-    console.warn("Empty response content from Fireworks; using fallback schedule.");
+    console.warn('Empty response content from Fireworks; using fallback schedule.');
     return {
-      status: "LACK INFO",
+      status: 'LACK INFO',
       data: {
-        reason: "Empty response from model; using fallback schedule at Grainger Library and ECEB.",
-        pathResult: [buildGraingerFallbackPath()],
-      },
+        reason:
+          'Empty response from model; using fallback schedule at Grainger Library and ECEB.',
+        pathResult: [buildGraingerFallbackPath()]
+      }
     };
   }
 
   // Handle possible prefixes and extract JSON
-  let status = "GOOD RESULT";
+  let status = 'GOOD RESULT';
   let rest = content;
 
-  if (rest.startsWith("GOOD RESULT")) {
-    status = "GOOD RESULT";
-    rest = rest.replace(/^GOOD RESULT\s*/i, "");
-  } else if (rest.startsWith("LACK INFO")) {
-    status = "LACK INFO";
-    rest = rest.replace(/^LACK INFO\s*/i, "");
+  if (rest.startsWith('GOOD RESULT')) {
+    status = 'GOOD RESULT';
+    rest = rest.replace(/^GOOD RESULT\s*/i, '');
+  } else if (rest.startsWith('LACK INFO')) {
+    status = 'LACK INFO';
+    rest = rest.replace(/^LACK INFO\s*/i, '');
   } else {
     // If the model did not obey the flag rule, treat it as LACK INFO.
-    status = "LACK INFO";
+    status = 'LACK INFO';
   }
 
-  const firstBrace = rest.indexOf("{");
-  const lastBrace = rest.lastIndexOf("}");
+  const firstBrace = rest.indexOf('{');
+  const lastBrace = rest.lastIndexOf('}');
   const beforeJson = firstBrace === -1 ? rest : rest.slice(0, firstBrace).trim();
-  const afterJson = lastBrace === -1 ? "" : rest.slice(lastBrace + 1).trim();
-  const outsideJsonText = [beforeJson, afterJson].filter(Boolean).join(" ");
+  const afterJson = lastBrace === -1 ? '' : rest.slice(lastBrace + 1).trim();
+  const outsideJsonText = [beforeJson, afterJson].filter(Boolean).join(' ');
 
   const normalizeReason = (text) => {
-    if (!text) return "";
+    if (!text) return '';
     const words = text.split(/\s+/).filter(Boolean);
     if (words.length > 150) {
-      return words.slice(0, 150).join(" ");
+      return words.slice(0, 150).join(' ');
     }
-    return words.join(" ");
+    return words.join(' ');
   };
 
   let parsed = null;
@@ -254,25 +305,30 @@ async function callFireworksAPI({
     try {
       parsed = JSON.parse(jsonText);
     } catch (err) {
-      console.warn("Failed to parse JSON from model output; will fall back to Grainger/ECEB.", err.message);
+      console.warn(
+        'Failed to parse JSON from model output; will fall back to Grainger/ECEB.',
+        err.message
+      );
       parsed = null;
     }
   }
 
   // If we got valid JSON, enrich it with a reason and return
-  if (parsed && typeof parsed === "object") {
+  if (parsed && typeof parsed === 'object') {
     if (!Array.isArray(parsed.pathResult) || parsed.pathResult.length === 0) {
-      console.warn("Parsed JSON has empty or missing pathResult; using fallback schedule.");
+      console.warn(
+        'Parsed JSON has empty or missing pathResult; using fallback schedule.'
+      );
       parsed.pathResult = [buildGraingerFallbackPath()];
     }
 
     let reason =
-      typeof parsed.reason === "string" && parsed.reason.trim()
+      typeof parsed.reason === 'string' && parsed.reason.trim()
         ? parsed.reason
         : outsideJsonText ||
-          (status === "LACK INFO"
-            ? "The model reported limited context; using a simplified schedule at Grainger Library and ECEB."
-            : "Schedule generated based on the available context.");
+          (status === 'LACK INFO'
+            ? 'The model reported limited context; using a simplified schedule at Grainger Library and ECEB.'
+            : 'Schedule generated based on the available context.');
 
     parsed.reason = normalizeReason(reason);
     return { status, data: parsed };
@@ -282,25 +338,25 @@ async function callFireworksAPI({
   const fallbackReason =
     outsideJsonText ||
     content ||
-    "Model could not generate a structured schedule; using fallback at Grainger Library and ECEB.";
+    'Model could not generate a structured schedule; using fallback at Grainger Library and ECEB.';
 
   return {
-    status: "LACK INFO",
+    status: 'LACK INFO',
     data: {
       reason: normalizeReason(fallbackReason),
-      pathResult: [buildGraingerFallbackPath()],
-    },
+      pathResult: [buildGraingerFallbackPath()]
+    }
   };
 }
 
 // Unprotected route to test Fireworks.ai integration
 app.get('/api/fireworks-test', async (req, res) => {
   try {
-    console.log("Received request for /api/fireworks-test");
+    console.log('Received request for /api/fireworks-test');
     const { status, data } = await callFireworksAPI();
     res.json({ success: true, status, ...data });
   } catch (error) {
-    console.error("Fireworks API test error:", error.message);
+    console.error('Fireworks API test error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -317,25 +373,25 @@ app.post('/api/llm-schedules', async (req, res) => {
       transit: '{{transit_block}}',
       weather: '{{weather_block}}',
       userRequest: userRequest || '{{user_request}}',
-      targetDate: date || '{{target_date}}',
+      targetDate: date || '{{target_date}}'
     };
 
     const models = [
       {
         id: 1,
-        modelId: "accounts/fireworks/models/deepseek-v3p1",
-        modelName: "DeepSeek v3.1",
+        modelId: 'accounts/fireworks/models/deepseek-v3p1',
+        modelName: 'DeepSeek v3.1'
       },
       {
         id: 2,
-        modelId: "accounts/fireworks/models/qwen2p5-vl-32b-instruct",
-        modelName: "Qwen3 VL 30B A3B Instruct",
+        modelId: 'accounts/fireworks/models/qwen2p5-vl-32b-instruct',
+        modelName: 'Qwen3 VL 30B A3B Instruct'
       },
       {
         id: 3,
-        modelId: "accounts/fireworks/models/llama-v3p3-70b-instruct",
-        modelName: "Llama v3.3 70B Instruct",
-      },
+        modelId: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+        modelName: 'Llama v3.3 70B Instruct'
+      }
     ];
 
     const options = await Promise.all(
@@ -343,7 +399,7 @@ app.post('/api/llm-schedules', async (req, res) => {
         try {
           const { status, data } = await callFireworksAPI({
             model: m.modelId,
-            promptArgs,
+            promptArgs
           });
 
           const firstPath =
@@ -352,44 +408,81 @@ app.post('/api/llm-schedules', async (req, res) => {
               : null;
 
           const effectivePath =
-            firstPath && Array.isArray(firstPath.schedule) && firstPath.schedule.length > 0
+            firstPath &&
+            Array.isArray(firstPath.schedule) &&
+            firstPath.schedule.length > 0
               ? firstPath
               : buildGraingerFallbackPath(`Option ${m.id}: Grainger Library 2F`);
+
+          const schedule = effectivePath.schedule || [];
+
+          // ⭐ New: build road-aware routes for each leg using OSRM
+          const segments = [];
+          for (let i = 0; i < schedule.length - 1; i++) {
+            const start = schedule[i].coordinates;
+            const end = schedule[i + 1].coordinates;
+            const route = await getDrivingRoute(start, end); // may be empty []
+
+            segments.push({
+              fromIndex: i,
+              toIndex: i + 1,
+              route
+            });
+          }
 
           return {
             id: m.id,
             modelId: m.modelId,
             modelName: m.modelName,
             status,
-            reason: data.reason || "",
+            reason: data.reason || '',
             title: effectivePath.title || `Option ${m.id}`,
-            schedule: effectivePath.schedule || [],
-            isFallback: !!effectivePath.fallback,
+            schedule,
+            segments, // ⭐ 给前端的真路线数据
+            isFallback: !!effectivePath.fallback
           };
         } catch (err) {
           console.error(`LLM call failed for model ${m.modelId}:`, err);
-          const fallbackPath = buildGraingerFallbackPath(`Option ${m.id}: Grainger Library 2F`);
+          const fallbackPath = buildGraingerFallbackPath(
+            `Option ${m.id}: Grainger Library 2F`
+          );
+          const schedule = fallbackPath.schedule || [];
+
+          // 即便是 fallback，也给一份（可能是空的）segments，前端逻辑更统一
+          const segments = [];
+          for (let i = 0; i < schedule.length - 1; i++) {
+            const start = schedule[i].coordinates;
+            const end = schedule[i + 1].coordinates;
+            const route = await getDrivingRoute(start, end);
+            segments.push({
+              fromIndex: i,
+              toIndex: i + 1,
+              route
+            });
+          }
+
           return {
             id: m.id,
             modelId: m.modelId,
             modelName: m.modelName,
-            status: "FAILED",
+            status: 'FAILED',
             reason:
-              err && typeof err.message === "string"
+              err && typeof err.message === 'string'
                 ? err.message
-                : "Failed to generate schedule; using fallback at Grainger Library.",
+                : 'Failed to generate schedule; using fallback at Grainger Library.',
             title: fallbackPath.title,
-            schedule: fallbackPath.schedule,
-            isFallback: true,
+            schedule,
+            segments,
+            isFallback: true
           };
         }
-      }),
+      })
     );
 
     res.json({ success: true, options });
   } catch (error) {
-    console.error("Error in /api/llm-schedules:", error);
-    res.status(500).json({ success: false, error: "server_error" });
+    console.error('Error in /api/llm-schedules:', error);
+    res.status(500).json({ success: false, error: 'server_error' });
   }
 });
 
