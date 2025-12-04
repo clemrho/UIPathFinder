@@ -38,18 +38,18 @@ interface SearchHistoryEntry {
 
 // UIUC 校园真实地点坐标
 const UIUC_LOCATIONS = [
-  { name: 'Illini Union', lat: 40.1093, lng: -88.2272 },
-  { name: 'Grainger Library', lat: 40.1125, lng: -88.2267 },
-  { name: 'Siebel Center', lat: 40.1138, lng: -88.2249 },
-  { name: 'Main Quad', lat: 40.1073, lng: -88.2284 },
-  { name: 'CRCE (Gym)', lat: 40.1014, lng: -88.2362 },
-  { name: 'Memorial Stadium', lat: 40.0993, lng: -88.2359 },
-  { name: 'Altgeld Hall', lat: 40.1095, lng: -88.2281 },
-  { name: 'Foellinger Hall', lat: 40.1058, lng: -88.2272 },
-  { name: 'Krannert Center', lat: 40.1080, lng: -88.2236 },
-  { name: 'ISR Dining', lat: 40.1056, lng: -88.2187 },
-  { name: 'ECE Building', lat: 40.1149, lng: -88.2280 },
-  { name: 'Campus Rec Center', lat: 40.1015, lng: -88.2355 }
+  { name: "Illini Union", lat: 40.1093, lng: -88.2272 },
+  { name: "Grainger Library", lat: 40.1125, lng: -88.2267 },
+  { name: "Siebel Center", lat: 40.1138, lng: -88.2249 },
+  { name: "Main Quad", lat: 40.1073, lng: -88.2284 },
+  { name: "CRCE (Gym)", lat: 40.1014, lng: -88.2362 },
+  { name: "Memorial Stadium", lat: 40.0993, lng: -88.2359 },
+  { name: "Altgeld Hall", lat: 40.1095, lng: -88.2281 },
+  { name: "Foellinger Hall", lat: 40.1058, lng: -88.2272 },
+  { name: "Krannert Center", lat: 40.108, lng: -88.2236 },
+  { name: "ISR Dining", lat: 40.1056, lng: -88.2187 },
+  { name: "ECE Building", lat: 40.1149, lng: -88.228 },
+  { name: "Campus Rec Center", lat: 40.1015, lng: -88.2355 },
 ];
 
 function generateRandomLocations(count: number) {
@@ -58,23 +58,24 @@ function generateRandomLocations(count: number) {
 }
 
 export default function App() {
-  const { isAuthenticated, isLoading, getAccessTokenSilently, logout } = useAuth0();
+  const { isAuthenticated, isLoading, getAccessTokenSilently, logout } =
+    useAuth0();
   const navigate = useNavigate();
   const [pathOptions, setPathOptions] = useState<PathOption[]>([]);
   const [showRestore, setShowRestore] = useState(false);
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
-  const [currentUserRequest, setCurrentUserRequest] = useState<string>('');
-  const [currentRequestedDate, setCurrentRequestedDate] = useState<string>('');
+  const [currentUserRequest, setCurrentUserRequest] = useState<string>("");
+  const [currentRequestedDate, setCurrentRequestedDate] = useState<string>("");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === "undefined") return false;
     // If we already stored a login flag, trust it
-    if (window.localStorage.getItem('uipathfinder_logged_in') === 'true') {
+    if (window.localStorage.getItem("uipathfinder_logged_in") === "true") {
       return true;
     }
     // If we just came back from Auth0, there will be a ?code=... param
     const params = new URLSearchParams(window.location.search);
-    if (params.get('code')) {
-      window.localStorage.setItem('uipathfinder_logged_in', 'true');
+    if (params.get("code")) {
+      window.localStorage.setItem("uipathfinder_logged_in", "true");
       return true;
     }
     return false;
@@ -84,10 +85,10 @@ export default function App() {
   const handleLogin = () => {
     // Local login: mark as logged in and go to main page
     setIsLoggedIn(true);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('uipathfinder_logged_in', 'true');
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("uipathfinder_logged_in", "true");
     }
-    navigate('/');
+    navigate("/");
   };
 
   const handleLogout = () => {
@@ -95,18 +96,18 @@ export default function App() {
     setPathOptions([]);
     setShowRestore(false);
     setSearchHistory([]);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('uipathfinder_logged_in');
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("uipathfinder_logged_in");
     }
     // Call Auth0 logout if available
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       logout({
         logoutParams: {
-          returnTo: `${window.location.origin}/login`
-        }
+          returnTo: `${window.location.origin}/login`,
+        },
       });
     } else {
-      navigate('/login');
+      navigate("/login");
     }
   };
 
@@ -116,8 +117,12 @@ export default function App() {
     setCurrentRequestedDate(date);
     try {
       const resp = await generateSchedulesWithLlm(userRequest, date);
-      if (resp.success && Array.isArray(resp.options) && resp.options.length > 0) {
-        const mapped: PathOption[] = resp.options.map(opt => ({
+      if (
+        resp.success &&
+        Array.isArray(resp.options) &&
+        resp.options.length > 0
+      ) {
+        const mapped: PathOption[] = resp.options.map((opt) => ({
           id: opt.id,
           title: opt.title,
           schedule: opt.schedule as ScheduleItem[],
@@ -133,44 +138,57 @@ export default function App() {
         setPathOptions([]);
       }
     } catch (err) {
-      console.error('LLM schedule generation failed', err);
+      console.error("LLM schedule generation failed", err);
       // fallback: clear options; frontend will show empty state
       setPathOptions([]);
     }
   };
 
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
   const handleSelectPlan = async (selected: PathOption) => {
     // Update UI to show the selected plan
     setPathOptions([selected]);
     // Build subtitle as arrow-joined places (every place in the selected schedule)
-    const subtitle = (selected.schedule || []).map(item => item.location).join(' → ');
+    const subtitle = (selected.schedule || [])
+      .map((item) => item.location)
+      .join(" → ");
     // Build payload for backend: title is the user's prompt
     const payload = {
       title: `Selected option for ${currentRequestedDate}`,
       subtitle,
-      userRequest: currentUserRequest || '',
-      requestedDate: currentRequestedDate || '',
+      userRequest: currentUserRequest || "",
+      requestedDate: currentRequestedDate || "",
       metadata: {},
       // store only the selected option so history reflects the chosen plan
-      pathOptions: [selected]
+      pathOptions: [selected],
     };
     // Try saving to backend for authenticated users, also update local history immediately
     try {
-      if (isAuthenticated && typeof getAccessTokenSilently === 'function') {
+      if (isAuthenticated && typeof getAccessTokenSilently === "function") {
         const saved = await saveHistory(getAccessTokenSilently, payload);
         const entry: SearchHistoryEntry = {
           id: saved._id || saved.id || Date.now().toString(),
           timestamp: saved.createdAt ? new Date(saved.createdAt) : new Date(),
-          userRequest: saved.userRequest || saved.user_request || payload.userRequest,
+          userRequest:
+            saved.userRequest || saved.user_request || payload.userRequest,
           date: saved.requestedDate || payload.requestedDate,
-          pathOptions: (saved.pathOptions || saved.path_options || [selected]).map((p: any, idx: number) => ({ id: idx, title: p.title, schedule: p.schedule || [] })),
+          pathOptions: (
+            saved.pathOptions ||
+            saved.path_options || [selected]
+          ).map((p: any, idx: number) => ({
+            id: idx,
+            title: p.title,
+            schedule: p.schedule || [],
+          })),
           title: saved.title || payload.title,
-          subtitle: saved.subtitle || payload.subtitle
+          subtitle: saved.subtitle || payload.subtitle,
         };
-        setSearchHistory(prev => [entry, ...prev]);
-        setToast({ message: 'Saved!', type: 'success' });
+        setSearchHistory((prev) => [entry, ...prev]);
+        setToast({ message: "Saved!", type: "success" });
         setTimeout(() => setToast(null), 2000);
       } else {
         // not authenticated — just add to local history
@@ -181,14 +199,14 @@ export default function App() {
           date: payload.requestedDate,
           pathOptions: [selected],
           title: payload.title,
-          subtitle: payload.subtitle
+          subtitle: payload.subtitle,
         };
-        setSearchHistory(prev => [entry, ...prev]);
-        setToast({ message: 'Saved locally!', type: 'success' });
+        setSearchHistory((prev) => [entry, ...prev]);
+        setToast({ message: "Saved locally!", type: "success" });
         setTimeout(() => setToast(null), 2000);
       }
     } catch (err) {
-      console.debug('saveHistory failed', err);
+      console.debug("saveHistory failed", err);
       // fallback: add local entry so user sees it
       const entry: SearchHistoryEntry = {
         id: Date.now().toString(),
@@ -197,27 +215,27 @@ export default function App() {
         date: payload.requestedDate,
         pathOptions: [selected],
         title: payload.title,
-        subtitle: payload.subtitle
+        subtitle: payload.subtitle,
       };
-      setSearchHistory(prev => [entry, ...prev]);
-      setToast({ message: 'Saved locally!', type: 'success' });
+      setSearchHistory((prev) => [entry, ...prev]);
+      setToast({ message: "Saved locally!", type: "success" });
       setTimeout(() => setToast(null), 2000);
     }
   };
 
   const handleShowRestore = () => {
     setShowRestore(false);
-    navigate('/history');
+    navigate("/history");
   };
 
   const handleBackFromHistory = () => {
-    navigate('/');
+    navigate("/");
   };
 
   const handleRestoreFromHistory = (entry: SearchHistoryEntry) => {
     setPathOptions(entry.pathOptions);
     setShowRestore(false);
-    navigate('/');
+    navigate("/");
   };
 
   const mainElement = isLoading ? (
@@ -233,19 +251,22 @@ export default function App() {
           {toast.message}
         </div>
       )}
-      <Header onGeneratePaths={handleGeneratePaths} onShowRestore={handleShowRestore} onLogout={handleLogout} />
-      <MainContent pathOptions={pathOptions} showRestore={showRestore} onSelectPlan={handleSelectPlan} />
+      <Header
+        onGeneratePaths={handleGeneratePaths}
+        onShowRestore={handleShowRestore}
+        onLogout={handleLogout}
+      />
+      <MainContent
+        pathOptions={pathOptions}
+        showRestore={showRestore}
+        onSelectPlan={handleSelectPlan}
+      />
     </div>
   );
 
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          <Navigate to="/" replace />
-        }
-      />
+      <Route path="/login" element={<Navigate to="/" replace />} />
       <Route
         path="/history"
         element={
