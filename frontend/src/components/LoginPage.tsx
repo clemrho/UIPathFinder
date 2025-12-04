@@ -214,9 +214,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Login Form */}
         <div
-          className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden"
+          className="rounded-2xl shadow-2xl overflow-hidden"
           style={{
             animation: "scaleIn 0.2s ease-in-out 0.6s backwards",
+            boxShadow:
+              "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.1)",
+            background: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
           }}
         >
           <style>{`
@@ -254,89 +257,107 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             }
           `}</style>
           {/* Form Header */}
-          <div className="bg-[#1e3a5f] text-white px-8 py-6">
-            <h2 className="text-2xl mb-2">Sign In</h2>
-            <p className="text-gray-300 text-sm">
-              Enter your credentials to access your account
+          <div className="px-8 py-8 text-center">
+            <h2
+              className="text-3xl font-bold mb-3 text-gray-800"
+              style={{ color: "#1f2937" }}
+            >
+              Hi Illinis!
+            </h2>
+            <p className="text-gray-600 text-sm" style={{ color: "#4b5563" }}>
+              Ready to explore the campus pathways?
             </p>
           </div>
 
           {/* Form Body */}
-          <form onSubmit={handleLogin} className="px-8 py-8 space-y-6">
+          <div className="px-8 py-10">
             {/* Error Message */}
             {loginError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {loginError}
+              <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded mb-6 flex items-start">
+                <svg
+                  className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className="text-sm">{loginError}</span>
               </div>
             )}
 
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-gray-700 mb-2">
-                Email (optional)
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="your-email@illinois.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-gray-100 border-gray-300 rounded-lg px-4 py-3"
-                disabled={isAuthenticating}
-              />
-            </div>
+            {/* Main Auth Button */}
+            <Button
+              onClick={(e) => {
+                e.preventDefault();
+                handleLogin(e as any);
+              }}
+              className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 py-6 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg"
+              disabled={isAuthenticating || isLoading}
+              style={{ color: "white", backgroundColor: "#f97316" }}
+            >
+              {isAuthenticating || isLoading ? (
+                <span className="flex items-center justify-center">
+                  <svg
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Authenticating...
+                </span>
+              ) : (
+                "Sign In with Auth0"
+              )}
+            </Button>
 
-            {/* Note: Password field removed - Auth0 handles authentication */}
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-              ℹ️ Click "Log In" to authenticate securely through Auth0
-            </div>
-
-            {/* Forgot Password */}
-            <div>
-              <button
-                type="button"
-                className="text-gray-700 text-sm hover:underline"
-                onClick={() =>
-                  alert(
-                    "Password reset functionality would be implemented here",
-                  )
-                }
-              >
-                Forgot password?
-              </button>
-            </div>
-
-            {/* Buttons */}
-            <div className="space-y-3 pt-2">
-              <Button
-                type="submit"
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white py-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isAuthenticating || isLoading}
-              >
-                {isAuthenticating || isLoading
-                  ? "Authenticating..."
-                  : "Log In with Auth0"}
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">
-                    Or continue with
-                  </span>
-                </div>
+            {/* Divider */}
+            <div className="relative py-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
               </div>
+              <div className="relative flex justify-center text-sm">
+                <span
+                  className="px-4 text-gray-700 font-medium"
+                  style={{
+                    color: "#374151",
+                    background:
+                      "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
+                  }}
+                >
+                  Or continue with
+                </span>
+              </div>
+            </div>
 
+            {/* Social Login Buttons */}
+            <div className="space-y-3">
               <Button
                 type="button"
                 variant="outline"
-                className="w-full border-2 border-gray-300 text-gray-700 hover:bg-gray-50 py-6 rounded-lg transition-colors disabled:opacity-50"
+                className="w-full border-2 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-300 py-5 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 font-medium"
                 onClick={() => handleSocialLogin("google-oauth2")}
                 disabled={isAuthenticating || isLoading}
+                style={{ color: "#374151" }}
               >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -356,8 +377,38 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </svg>
                 Continue with Google
               </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-2 border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-300 py-5 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 font-medium"
+                onClick={() => handleSocialLogin("github")}
+                disabled={isAuthenticating || isLoading}
+                style={{ color: "#374151" }}
+              >
+                <svg
+                  className="w-5 h-5 mr-3"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Continue with GitHub
+              </Button>
             </div>
-          </form>
+
+            {/* Help Text */}
+            <p
+              className="text-center text-sm text-gray-600 mt-8"
+              style={{ color: "#4b5563" }}
+            >
+              Secure authentication powered by Auth0
+            </p>
+          </div>
         </div>
 
         {/* Footer */}
