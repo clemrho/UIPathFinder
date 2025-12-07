@@ -8,6 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { SearchHistoryPage } from './components/SearchHistoryPage';
 import LocationListPage from './components/LocationListPage';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { incrementBuildingUsageApi } from './api/buildings';
 //import SearchPage from './components/SearchPage';
 
 interface ScheduleItem {
@@ -73,7 +74,11 @@ export default function App() {
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
   const [currentUserRequest, setCurrentUserRequest] = useState<string>("");
   const [currentRequestedDate, setCurrentRequestedDate] = useState<string>("");
+  const [homeAddress, setHomeAddress] = useState<string>("");
+  const [sleepAtLibrary, setSleepAtLibrary] = useState<boolean>(false);
+  const [mealPreference, setMealPreference] = useState<string>("Any");
   const [restoredView, setRestoredView] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     // If we already stored a login flag, trust it
@@ -119,13 +124,17 @@ export default function App() {
     }
   };
 
-  const handleGeneratePaths = async (userRequest: string, date: string) => {
+  const handleGeneratePaths = async (userRequest: string, date: string, home: string, sleepFlag: boolean, mealPref: string) => {
     setShowRestore(false);
     setRestoredView(false);
     setCurrentUserRequest(userRequest);
     setCurrentRequestedDate(date);
+    setHomeAddress(home);
+    setSleepAtLibrary(sleepFlag);
+    setMealPreference(mealPref);
+    setIsGenerating(true);
     try {
-      const resp = await generateSchedulesWithLlm(userRequest, date);
+      const resp = await generateSchedulesWithLlm(userRequest, date, home, sleepFlag, mealPref);
       if (
         resp.success &&
         Array.isArray(resp.options) &&
@@ -151,6 +160,8 @@ export default function App() {
       console.error("LLM schedule generation failed", err);
       // fallback: clear options; frontend will show empty state
       setPathOptions([]);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -173,7 +184,7 @@ export default function App() {
       subtitle,
       userRequest: currentUserRequest || "",
       requestedDate: currentRequestedDate || "",
-      metadata: {},
+      metadata: { homeAddress, sleepAtLibrary, mealPreference },
       // store only the selected option so history reflects the chosen plan
       pathOptions: [selected],
     };
@@ -185,6 +196,16 @@ export default function App() {
           : null,
         payload,
       );
+      try {
+        await incrementBuildingUsageApi(
+          typeof getAccessTokenSilently === "function"
+            ? getAccessTokenSilently
+            : null,
+          [selected],
+        );
+      } catch (e) {
+        console.warn("Increment usage failed", e);
+      }
       const entry: SearchHistoryEntry = {
         id: saved._id || saved.id || Date.now().toString(),
         timestamp: saved.createdAt ? new Date(saved.createdAt) : new Date(),
@@ -236,6 +257,11 @@ export default function App() {
     setPathOptions(entry.pathOptions);
     setShowRestore(false);
     setRestoredView(true);
+    // Also bump usage counts for restored paths
+    incrementBuildingUsageApi(
+      typeof getAccessTokenSilently === "function" ? getAccessTokenSilently : null,
+      entry.pathOptions || [],
+    ).catch((e) => console.warn("Increment usage from restore failed", e));
     navigate("/");
   };
 
@@ -262,10 +288,17 @@ export default function App() {
         onShowRestore={handleShowRestore}
         onShowFavorites={handleShowFavorites}
         onLogout={handleLogout}
+        homeAddress={homeAddress}
+        onHomeAddressChange={setHomeAddress}
+        sleepAtLibrary={sleepAtLibrary}
+        onSleepAtLibraryChange={setSleepAtLibrary}
+        mealPreference={mealPreference}
+        onMealPreferenceChange={setMealPreference}
       />
       <MainContent
         pathOptions={pathOptions}
         showRestore={showRestore}
+        isGenerating={isGenerating}
         onSelectPlan={restoredView ? undefined : handleSelectPlan}
       />
     </div>

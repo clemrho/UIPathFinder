@@ -20,3 +20,17 @@ export async function listBuildingUsage(getToken: any) {
   if (!res.ok) throw new Error(`Usage fetch failed: ${res.status}`);
   return res.json();
 }
+
+export async function incrementBuildingUsageApi(getToken: any, pathOptions: any[]) {
+  const token = await maybeGetToken(getToken);
+  const res = await fetch(`${API_BASE}/building-usage/increment`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ pathOptions }),
+  });
+  if (!res.ok) throw new Error(`Usage increment failed: ${res.status}`);
+  return res.json();
+}

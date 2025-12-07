@@ -24,13 +24,19 @@ export interface LlmSchedulesResponse {
   options: LlmPathOption[];
 }
 
-export async function generateSchedulesWithLlm(userRequest: string, date: string): Promise<LlmSchedulesResponse> {
+export async function generateSchedulesWithLlm(
+  userRequest: string,
+  date: string,
+  homeAddress: string,
+  sleepAtLibrary: boolean,
+  mealPreference: string
+): Promise<LlmSchedulesResponse> {
   const res = await fetch(`${API_BASE}/llm-schedules`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ userRequest, date })
+    body: JSON.stringify({ userRequest, date, homeAddress, sleepAtLibrary, mealPreference })
   });
 
   if (!res.ok) {

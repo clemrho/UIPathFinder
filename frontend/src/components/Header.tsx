@@ -2,10 +2,16 @@ import React, { useState } from 'react';
 import { Toast } from './Toast';
 
 interface HeaderProps {
-  onGeneratePaths: (userRequest: string, date: string) => void | Promise<void>;
+  onGeneratePaths: (userRequest: string, date: string, homeAddress: string, sleepAtLibrary: boolean, mealPreference: string) => void | Promise<void>;
   onShowRestore: () => void;
   onShowFavorites: () => void;
   onLogout: () => void;
+  homeAddress: string;
+  onHomeAddressChange: (value: string) => void;
+  sleepAtLibrary: boolean;
+  onSleepAtLibraryChange: (value: boolean) => void;
+  mealPreference: string;
+  onMealPreferenceChange: (value: string) => void;
 }
 
 const SendIcon = () => (
@@ -36,7 +42,18 @@ const FavoriteIcon = () => (
   </svg>
 );
 
-export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogout }: HeaderProps) {
+export function Header({
+  onGeneratePaths,
+  onShowRestore,
+  onShowFavorites,
+  onLogout,
+  homeAddress,
+  onHomeAddressChange,
+  sleepAtLibrary,
+  onSleepAtLibraryChange,
+  mealPreference,
+  onMealPreferenceChange,
+}: HeaderProps) {
   const [inputMessage, setInputMessage] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -59,7 +76,7 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
       return;
     }
 
-    await onGeneratePaths(inputMessage, selectedDate);
+    await onGeneratePaths(inputMessage, selectedDate, homeAddress, sleepAtLibrary, mealPreference);
     showToast('Generating schedule suggestions...', 'success');
   };
 
@@ -87,28 +104,28 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
             <button
               type="button"
               onClick={() => window.open('https://www.accuweather.com/en/us/champaign/61820/weather-forecast/328774', '_blank')}
-              className="flex items-center gap-2 px-4 py-2 bg-cyan-500/80 hover:bg-cyan-500 rounded-lg transition-colors border border-cyan-300 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#13294B] to-sky-500 hover:from-[#0f2140] hover:to-sky-400 rounded-lg transition-colors border border-sky-400 shadow-sm"
             >
               <span className="text-sm font-medium">Weather</span>
             </button>
             <button
               type="button"
               onClick={() => window.open('https://mtd.org', '_blank')}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-600 rounded-lg transition-colors border border-purple-400 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-500 via-pink-500 to-orange-500 hover:from-sky-400 hover:via-pink-400 hover:to-orange-400 rounded-lg transition-colors border border-pink-200 shadow-sm"
             >
               <span className="text-sm font-medium">Bus Route</span>
             </button>
             <button
               type="button"
               onClick={onShowFavorites}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500/80 hover:bg-orange-500 rounded-lg transition-colors border border-orange-400 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#d14d2a] via-[#E84A27] to-amber-400 hover:from-[#c03f1f] hover:via-[#f0612f] hover:to-amber-300 rounded-lg transition-colors border border-orange-300 shadow-sm"
             >
               <FavoriteIcon />
               <span className="text-sm font-medium">My Favorite Place</span>
             </button>
             <button
               onClick={onShowRestore}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-600/50 hover:bg-slate-600 rounded-lg transition-colors border border-slate-500"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-[#13294B] hover:from-amber-400 hover:to-[#0f2140] rounded-lg transition-colors border border-slate-600 shadow-sm"
             >
               <HistoryIcon />
               <span className="text-sm">History</span>
@@ -124,8 +141,8 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
         </div>
 
         {/* Bottom row - Input form */}
-        <form onSubmit={handleSubmit} className="flex items-end gap-3">
-          <div className="flex-1">
+        <form onSubmit={handleSubmit} className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px] max-w-[360px]">
             <label className="block text-xs text-slate-300 mb-1.5">
               💬 Describe Your Schedule Needs
             </label>
@@ -133,12 +150,25 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="e.g., I want to plan a productive study day with classes, library time, and workout..."
+              placeholder="e.g., study + gym + clubs..."
               className="w-full h-10 rounded-lg border border-slate-500 bg-slate-700/50 px-4 py-2 text-sm text-white placeholder-slate-400 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
             />
           </div>
 
-          <div className="w-48">
+          <div className="w-56">
+            <label className="block text-xs text-slate-300 mb-1.5">
+              🏠 Home Address
+            </label>
+            <input
+              type="text"
+              value={homeAddress}
+              onChange={(e) => onHomeAddressChange(e.target.value)}
+              placeholder="e.g., 123 E Green St, Champaign"
+              className="w-full h-10 rounded-lg border border-slate-500 bg-slate-700/50 px-3 py-2 text-sm text-white placeholder-slate-400 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            />
+          </div>
+
+          <div className="w-40">
             <label className="block text-xs text-slate-300 mb-1.5">
               📅 Select Date
             </label>
@@ -149,6 +179,44 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
               className="w-full h-10 rounded-lg border border-slate-500 bg-slate-700/50 px-3 py-2 text-sm text-white outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
             />
           </div>
+
+          <div className="w-48">
+            <label className="block text-xs text-slate-300 mb-1.5">🍽️ Meal Preference</label>
+            <select
+              value={mealPreference}
+              onChange={(e) => onMealPreferenceChange(e.target.value)}
+              className="w-full h-10 rounded-lg border border-slate-500 bg-slate-700/50 px-3 py-2 text-sm text-white outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            >
+              {[
+                'Any',
+                'Northern Chinese Cuisine',
+                'Shanghaiese / Cantonese / Sichuanese Cuisine',
+                'Chinese food (Other)',
+                'Japanese',
+                'Korean',
+                'Indian',
+                'Thai',
+                'Asian food (Other)',
+                'American',
+                'Mexican',
+                'Italian',
+                'Mediterranean',
+                'Vegan/Vegetarian',
+              ].map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-slate-200 mb-2 order-last lg:order-none">
+            <input
+              type="checkbox"
+              checked={sleepAtLibrary}
+              onChange={(e) => onSleepAtLibraryChange(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-400 bg-slate-700"
+            />
+            allows sleep at Grainger
+          </label>
 
           <button
             type="submit"

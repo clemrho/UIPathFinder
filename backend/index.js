@@ -4,6 +4,8 @@ const cors = require('cors');
 const morgan = require('morgan');
 const jwt = require('jsonwebtoken');
 const jwksRsa = require('jwks-rsa');
+const fs = require('fs');
+const path = require('path');
 const { buildFireworksPrompt } = require('../LLM/llmama');
 const {
   findOrCreateUser,
@@ -61,6 +63,103 @@ async function resolveUser(req, res) {
   }
   // guest user for local usage without Auth0
   return await findOrCreateUser('guest-local', null, 'Local Guest');
+}
+
+async function fetchWeatherSummary(targetDate) {
+  try {
+    const date = targetDate ? new Date(targetDate) : new Date();
+    const ymd = date.toISOString().slice(0, 10);
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=40.1106&longitude=-88.2073&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America/Chicago&start_date=${ymd}&end_date=${ymd}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`weather status ${resp.status}`);
+    const data = await resp.json();
+    const hi = data?.daily?.temperature_2m_max?.[0];
+    const lo = data?.daily?.temperature_2m_min?.[0];
+    const precip = data?.daily?.precipitation_probability_max?.[0];
+    return `Date ${ymd}: high ${hi}°C, low ${lo}°C, precip ${precip}% (Champaign, IL).`;
+  } catch (e) {
+    console.warn('Weather fetch failed, using fallback', e.message || e);
+    return 'Weather unavailable; assume mild temperature and light wind.';
+  }
+}
+
+async function buildHistoryAndBuildings(userId) {
+  if (!userId) {
+    return { historyText: 'No history; treat as a new customer.', buildingList: [] };
+  }
+  try {
+    const rows = await listHistories(userId, 25, 0);
+    if (!rows || !rows.length) {
+      return {
+        historyText: 'No history; treat as a new customer.',
+        buildingList: []
+      };
+    }
+    const buildingMap = new Map();
+    const historyLines = rows.map((r) => {
+      const stops =
+        (r.pathOptions || [])
+          .flatMap((p) => p.schedule || [])
+          .map((s) => s.location)
+          .filter(Boolean)
+          .join(' -> ') || 'no stops';
+      (r.pathOptions || []).forEach((p) => {
+        (p.schedule || []).forEach((s) => {
+          if (!s.location) return;
+          const key = s.location.toLowerCase();
+          if (!buildingMap.has(key)) {
+            buildingMap.set(key, {
+              name: s.location,
+              lat: s.coordinates?.lat,
+              lng: s.coordinates?.lng
+            });
+          }
+        });
+      });
+      return `- [${r.requestedDate || r.date || 'unknown'}] "${r.userRequest || ''}" -> ${stops}`;
+    });
+
+    return {
+      historyText: historyLines.join('\n'),
+      buildingList: Array.from(buildingMap.values())
+    };
+  } catch (e) {
+    console.warn('History fetch failed', e.message || e);
+    return { historyText: 'History unavailable; treat as a new customer.', buildingList: [] };
+  }
+}
+
+function formatBuildingContext(buildingList) {
+  if (!buildingList || !buildingList.length) return 'No building data; prefer Grainger Library or ECEB as defaults.';
+  return buildingList
+    .map((b) => `- ${b.name} | coords: (${b.lat ?? 'n/a'}, ${b.lng ?? 'n/a'})`)
+    .join('\n');
+}
+
+let cachedRestaurants = null;
+function loadRestaurants() {
+  if (cachedRestaurants) return cachedRestaurants;
+  try {
+    const csvPath = path.join(__dirname, '..', 'database', 'UIUC_Restaurants.csv');
+    const raw = fs.readFileSync(csvPath, 'utf-8');
+    const lines = raw.split('\n').slice(1).filter(Boolean);
+    cachedRestaurants = lines
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        const parts = l.split(',');
+        const name = parts[0]?.trim();
+        const address = parts[1]?.trim();
+        return name ? `- ${name}${address ? ` | ${address}` : ''}` : null;
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (!cachedRestaurants) cachedRestaurants = 'Restaurants not available; pick reasonable campus dining.';
+  } catch (e) {
+    console.warn('Failed to load restaurants CSV', e.message || e);
+    cachedRestaurants = 'Restaurants not available; pick reasonable campus dining.';
+  }
+  return cachedRestaurants;
 }
 
 // Unprotected example API
@@ -152,6 +251,23 @@ app.get('/api/building-usage', async (req, res) => {
     if (!user) return res.json([]);
     const rows = await listBuildingUsage(user.id);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'invalid_token') {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Increment building usage for a given set of path options
+app.post('/api/building-usage/increment', async (req, res) => {
+  try {
+    const user = await resolveUser(req, res);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { pathOptions } = req.body || {};
+    await incrementBuildingUsage(user.id, Array.isArray(pathOptions) ? pathOptions : []);
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     if (err.message === 'invalid_token') {
@@ -381,12 +497,30 @@ app.post('/api/llm-schedules', async (req, res) => {
   try {
     const { userRequest, date } = req.body || {};
 
+    const user = await resolveUser(req, res);
+    const { historyText, buildingList } = await buildHistoryAndBuildings(
+      user?.id
+    );
+    const weatherText = await fetchWeatherSummary(date);
+    const historyCount = user?.id
+      ? (await listHistories(user.id, 50, 0))?.length || 0
+      : 0;
+
+    const promptContext = {
+      userProfile: `User: ${user?.email || 'guest'} | total histories: ${historyCount}`,
+      buildings: formatBuildingContext(buildingList),
+      histories: historyText,
+      weather: weatherText,
+      restaurants: loadRestaurants(),
+      mealPreference: req.body?.mealPreference || 'Any',
+      transit: 'Use campus walking/bus travel times; avoid impossible jumps.',
+      events: 'Not available; prioritize realistic time gaps between stops.'
+    };
+
     const promptArgs = {
-      userProfile: '{{user_profile_block}}',
-      events: '{{events_block}}',
-      buildings: '{{buildings_block}}',
-      transit: '{{transit_block}}',
-      weather: '{{weather_block}}',
+      ...promptContext,
+      homeAddress: req.body?.homeAddress || 'Home address not provided',
+      sleepAtLibrary: !!req.body?.sleepAtLibrary,
       userRequest: userRequest || '{{user_request}}',
       targetDate: date || '{{target_date}}'
     };

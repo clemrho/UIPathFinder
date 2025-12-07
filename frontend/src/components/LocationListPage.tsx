@@ -16,6 +16,8 @@ export default function LocationListPage() {
   const { getAccessTokenSilently } = useAuth0();
   const [usageMap, setUsageMap] = useState<Record<string, number>>({});
 
+  const defaultImage = 'https://upload.wikimedia.org/wikipedia/commons/8/8e/Alma_Mater_UIUC.jpg';
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -46,12 +48,12 @@ export default function LocationListPage() {
     'Electrical and Computer Engineering Building':
       'https://living-future.org/wp-content/uploads/2023/02/North_Side.jpeg_202301051354-1024x558.jpeg',
     'Activities and Recreation Center (ARC)':
-      'https://campusrec.illinois.edu/sites/default/files/styles/hero_image/public/paragraphs/hero/2022-05/ARC.jpg?h=e6b46478&itok=XgfrEVSA'
+      'https://campusrec.illinois.edu/sites/default/files/styles/hero_image/public/paragraphs/hero/2022-05/ARC.jpg?h=e6b46478&itok=XgfrEVSA',
+    'Memorial Stadium': 'https://upload.wikimedia.org/wikipedia/commons/0/0c/Memorial_Stadium_UIUC.jpg'
   };
 
   const makeImage = (name: string) =>
-    imageMap[name] ||
-    `https://source.unsplash.com/featured/?${encodeURIComponent(name + ' uiuc campus')}`;
+    imageMap[name] || defaultImage;
 
   const locations: Location[] = useMemo(() => {
     const names: { name: string; category: string }[] = [
@@ -154,7 +156,13 @@ export default function LocationListPage() {
               {/* Image */}
               <div className="relative h-48 overflow-hidden">
                 <img
-                  src={location.imageUrl}
+                  src={location.imageUrl || defaultImage}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== defaultImage) {
+                      target.src = defaultImage;
+                    }
+                  }}
                   alt={location.name}
                   className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
                 />

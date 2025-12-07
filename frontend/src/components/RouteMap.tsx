@@ -56,7 +56,11 @@ const stopIcon = (index: number, name: string) =>
 const palette = ["#2563eb", "#8b5cf6", "#22c55e", "#eab308", "#f97316", "#ef4444"];
 
 export function RouteMap({ locations, segments }: RouteMapProps) {
-  if (!locations || locations.length < 2) {
+  const validLocations = (locations || []).filter(
+    (l) => Number.isFinite(l.lat) && Number.isFinite(l.lng)
+  );
+
+  if (!validLocations || validLocations.length < 2) {
     return (
       <div className="mt-4">
         <div className="w-full h-[200px] rounded-lg border border-gray-200 flex items-center justify-center bg-gray-50 text-sm text-gray-500">
@@ -67,8 +71,8 @@ export function RouteMap({ locations, segments }: RouteMapProps) {
   }
 
   const positions: [number, number][] = useMemo(
-    () => locations.map((l) => [l.lat, l.lng]),
-    [locations]
+    () => validLocations.map((l) => [l.lat, l.lng]),
+    [validLocations]
   );
 
   const routes = useMemo(() => {
@@ -113,7 +117,7 @@ export function RouteMap({ locations, segments }: RouteMapProps) {
           />
         ))}
 
-        {locations.map((loc, idx) => (
+        {validLocations.map((loc, idx) => (
           <Marker
             key={loc.name + idx}
             position={[loc.lat, loc.lng]}

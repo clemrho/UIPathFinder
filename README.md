@@ -2,12 +2,12 @@
 
 > "Big Brother is Watching You."  --- _1984_
 
-UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a React frontend, an API backend, and an LLM/RAG layer that will ground suggestions in real campus data.
+UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a React frontend, an API backend, and an LLM layer that is grounded with campus data (buildings, weather, restaurants, and user history stored locally).
 
 The current version focuses on:
 - A full user flow (Auth0 login or local guest → main planner → history → favorites).
-- LLM-based schedule generation via Fireworks.ai with three models.
-- Local SQLite storage for histories and building-usage stats (no MongoDB required).
+- LLM-based schedule generation via Fireworks.ai with two models (Qwen3 VL 30B, Llama v3.3).
+- Local SQLite storage for histories, building-usage stats, and restaurant context (no MongoDB required).
 - A robust output contract: every model returns a JSON schedule plus a textual `reason`, with a consistent fallback if context is insufficient.
 
 ---
@@ -23,9 +23,10 @@ The current version focuses on:
 
 
 - **Main Planning Page (`/`)**
-  - Prompt-based request: users describe the kind of day they want (classes, study, gym, etc.) and pick a date.
-  - Generates multiple “path options” – each is a sequence of time-stamped activities at UIUC locations.
-  - UI shows each option as a structured schedule (time, location, activity) with coordinates for each stop.
+  - Prompt-based request: users describe the kind of day they want (classes, study, gym, etc.), pick a date, enter home address, choose meal preference, and optionally allow “sleep at Grainger.”
+  - Generates multiple “path options” – each is a sequence of time-stamped activities at UIUC locations; must start/end at home (unless sleeping at Grainger), include ≥5 stops, and insert lunch/dinner from the restaurant list.
+  - UI shows each option as a structured schedule (time, location, activity) with coordinates for each stop, real-road routes (Leaflet + OSRM), and estimated distances.
+  - Loading state shows a spinner plus three recommended spots while LLM results load; existing paths remain visible behind an overlay during refreshes.
 
 ![main](md_img/search.png)
 ![main](md_img/mapinfo.png)
@@ -38,7 +39,8 @@ The current version focuses on:
 ![hist](md_img/history.png)
 
 - **Favorites Page (`/favorites`)**
-  - 50+ UIUC locations with images; shows visit counts backed by the `building_usage` SQLite table (defaults to 1 if no prior data).
+  - 50+ UIUC locations with images; broken images fall back to a stable Alma Mater photo. Visit counts backed by the `building_usage` SQLite table (defaults to 1 if no prior data).
+  - Selecting or restoring a path increments building usage counts in SQLite so favorites stay fresh.
   - “Weather” (AccuWeather) and “Bus Route” (mtd.org) quick links in the header.
 
 - **Backend Integration**
@@ -59,9 +61,9 @@ The current version focuses on:
 
 - **Backend**
   - Node.js / Express
-  - SQLite (`backend/data.sqlite`) for users, histories, and building usage (`backend/db.js`)
+  - SQLite (`backend/data.sqlite`) for users, histories, building usage, and restaurant context (`backend/db.js`)
   - REST API consumed by the frontend via `src/api/histories.ts` and `src/api/buildings.ts`
-  - Fireworks.ai LLM integration (via the `openai` client) using multiple models
+  - Fireworks.ai LLM integration (via the `openai` client) using two models
 
 - **LLM / Prompting**
   - Central prompt builder in `LLM/llmama.js`
@@ -89,12 +91,12 @@ The current version focuses on:
 
 - **Backend App**
   - `backend/index.js`: Express server and API wiring (SQLite, Auth0 optional with local guest fallback).
-  - `backend/db.js`: SQLite schema and helpers for users, histories, and building usage.
+  - `backend/db.js`: SQLite schema and helpers for users, histories, building usage.
   - REST endpoints:
     - Histories: save, list, get by ID (`/api/histories`, `/api/histories/:id`).
-    - Building usage: `/api/building-usage` (used by Favorites counts).
+    - Building usage: `/api/building-usage` (read) and `/api/building-usage/increment` (write on select/restore).
     - LLM test: `GET /api/fireworks-test`.
-    - Multi-model schedules: `POST /api/llm-schedules` (returns three options).
+    - Multi-model schedules: `POST /api/llm-schedules` (returns two options).
 
 - **LLM Prompt Module**
   - `LLM/llmama.js`:
@@ -103,26 +105,18 @@ The current version focuses on:
 
 ---
 
-## LLM Prototype: Fireworks.ai + Llama (contract unchanged)
+## LLM Prototype: Fireworks.ai + Llama (updated contract)
 
 This project includes an early LLM integration to experiment with schedule generation before the full RAG pipeline is wired up.
 
 - **Prompt Contract**
-  - For each request, the backend builds a prompt with:
-    - System role + planning rules.
-    - Context placeholders (user profile, events, buildings, transit, weather).
-    - Strict JSON schema:
-      - `reason`: 3–150 word explanation of how the schedule was built or why context was limited.
-      - `pathResult`: array with a single object `{ title, schedule: ScheduleItem[] }`.
-    - Two leading flags:
-      - `"GOOD RESULT"` → model believes it satisfied the request with given context.
-      - `"LACK INFO"` → model believes context is insufficient.
-  - The model must always:
-    - Start with either `GOOD RESULT` or `LACK INFO`.
-    - Immediately output a JSON object in the specified format.
-    - When using `LACK INFO`, describe a simple fallback schedule:
-      - Study at Grainger Library 2F from 13:00–23:00.
-      - Sleep at ECEB from 23:00–09:00.
+  - Context includes: user profile, building list, weather (Open-Meteo), recent history (or “new customer”), restaurant list from `database/UIUC_Restaurants.csv`, home address, sleep-at-library flag, meal preference, transit guidance.
+  - Planning rules:
+    - Start at home ≥07:00; end at home before 24:00 unless “sleep at library” is true (then end at Grainger).
+    - ≥5 stops including home at start and end.
+    - Two meal stops (lunch/dinner) chosen from the restaurant list, respecting meal preference.
+    - Realistic travel; prefer campus buildings; avoid outdoor-heavy routes in bad weather.
+  - Output: flag `GOOD RESULT` or `LACK INFO` followed immediately by the JSON object; fallback remains Grainger + ECEB when lacking info.
 
 - **Backend Post-Processing**
   - Makes a single call per model (no retries).
@@ -150,7 +144,7 @@ This project includes an early LLM integration to experiment with schedule gener
     ```
   - The backend uses:
     - `baseURL = https://api.fireworks.ai/inference/v1`
-    - `model = "accounts/fireworks/models/llama-v3p1-8b-instruct"`
+    - models = Qwen3 VL 30B, Llama v3.3 (two options returned)
   - To test:
     - Start the backend: `cd backend && npm install && node index.js`
     - Call from a terminal or REST client:

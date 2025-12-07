@@ -72,8 +72,10 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
     return tokens.some((t) => lower.includes(t));
   };
 
-  const estimateTravelMinutes = (from?: ScheduleItem, to?: ScheduleItem) => {
-    if (!from || !to || !from.coordinates || !to.coordinates) return 8;
+  const estimateTravel = (from?: ScheduleItem, to?: ScheduleItem) => {
+    if (!from || !to || !from.coordinates || !to.coordinates) {
+      return { mins: 8, km: 0.6 };
+    }
     const R = 6371; // km
     const dLat = ((to.coordinates.lat - from.coordinates.lat) * Math.PI) / 180;
     const dLon = ((to.coordinates.lng - from.coordinates.lng) * Math.PI) / 180;
@@ -87,8 +89,9 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
     const distanceKm = R * c;
     const walkingSpeed = 4.5; // km/h
     const mins = (distanceKm / walkingSpeed) * 60;
-    if (!Number.isFinite(mins) || mins <= 0) return 6;
-    return Math.max(3, Math.round(mins));
+    const safeMins = !Number.isFinite(mins) || mins <= 0 ? 6 : Math.max(3, Math.round(mins));
+    const safeKm = !Number.isFinite(distanceKm) || distanceKm <= 0 ? 0.6 : distanceKm;
+    return { mins: safeMins, km: safeKm };
   };
 
   const togglePath = (pathId: number) => {
@@ -172,7 +175,7 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
                   <div className="space-y-6">
                     {path.schedule.map((item, index) => {
                       const next = path.schedule[index + 1];
-                      const travelMins = next ? estimateTravelMinutes(item, next) : null;
+                      const travel = next ? estimateTravel(item, next) : null;
                       const academic = isAcademic(item.location);
                       const stopColor = academic ? 'bg-blue-600' : 'bg-pink-500';
                       const stopShadow = academic ? 'shadow-blue-200' : 'shadow-pink-200';
@@ -197,9 +200,9 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
                                   <p className="text-sm text-gray-700">{item.activity}</p>
                                 </div>
                               </div>
-                              {travelMins !== null && (
+                              {travel !== null && (
                                 <div className="mt-2 flex items-center gap-2 text-xs text-sky-700 font-medium bg-white/80 rounded-full px-3 py-1 w-fit border border-sky-100 shadow-xs">
-                                  <span>Est. travel to next stop: ~{travelMins} min</span>
+                                  <span>Est. distance to next: ~{travel.km.toFixed(1)} km</span>
                                 </div>
                               )}
                             </div>
@@ -209,8 +212,8 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
                               <div className="w-px h-10 bg-gradient-to-b from-indigo-300 via-orange-300 to-pink-300" />
                               <div className="flex items-center gap-2 bg-white/70 px-3 py-1 rounded-full border border-orange-100 shadow-sm">
                                 <span className="text-lg">↓</span>
-                                {travelMins !== null && (
-                                  <span className="font-medium text-gray-700">Est. time ~{travelMins} min</span>
+                                {travel !== null && (
+                                  <span className="font-medium text-gray-700">Est. distance ~{travel.km.toFixed(1)} km</span>
                                 )}
                               </div>
                             </div>

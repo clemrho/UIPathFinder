@@ -19,6 +19,7 @@ interface MainContentProps {
   pathOptions: PathOption[];
   showRestore: boolean;
   userRequest?: string;
+  isGenerating?: boolean;
   onSelectPlan?: (selected: PathOption) => void | Promise<void>;
 }
 
@@ -29,7 +30,7 @@ const CalendarIcon = () => (
   </svg>
 );
 
-export function MainContent({ pathOptions, showRestore, onSelectPlan }: MainContentProps) {
+export function MainContent({ pathOptions, showRestore, onSelectPlan, isGenerating }: MainContentProps) {
   if (showRestore) {
     return (
       <div className="container mx-auto px-6 py-8">
@@ -42,6 +43,21 @@ export function MainContent({ pathOptions, showRestore, onSelectPlan }: MainCont
             </div>
             <p className="text-gray-400">No history records yet</p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isGenerating && pathOptions.length === 0) {
+    return (
+      <div className="container mx-auto px-6 py-12">
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200 flex flex-col gap-6 items-center">
+          <div className="w-16 h-16 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
+          <div>
+            <h3 className="text-xl text-gray-800 font-semibold">Generating paths…</h3>
+            <p className="text-gray-600 text-sm">Gathering buildings, history, weather, and restaurant options.</p>
+          </div>
+          <RecommendedSpots />
         </div>
       </div>
     );
@@ -65,8 +81,14 @@ export function MainContent({ pathOptions, showRestore, onSelectPlan }: MainCont
   }
 
   return (
-    <div className="container mx-auto px-6 py-8">
-  <EnhancedPathSuggestions pathOptions={pathOptions} onSelectPlan={onSelectPlan} />
+    <div className="container mx-auto px-6 py-8 relative">
+      {isGenerating && pathOptions.length > 0 && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl border border-orange-200">
+          <div className="w-14 h-14 border-4 border-orange-400 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-sm text-gray-700">Updating paths…</p>
+        </div>
+      )}
+      <EnhancedPathSuggestions pathOptions={pathOptions} onSelectPlan={onSelectPlan} />
     </div>
   );
 }
