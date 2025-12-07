@@ -26,6 +26,11 @@ interface PathOption {
   status?: string;
   reason?: string;
   isFallback?: boolean;
+  segments?: {
+    fromIndex: number;
+    toIndex: number;
+    route: { lat: number; lng: number }[];
+  }[];
 }
 
 interface SearchHistoryEntry {
@@ -135,6 +140,7 @@ export default function App() {
           status: opt.status,
           reason: opt.reason,
           isFallback: opt.isFallback,
+          segments: opt.segments || [],
         }));
         setPathOptions(mapped);
       } else {

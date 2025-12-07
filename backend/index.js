@@ -394,16 +394,11 @@ app.post('/api/llm-schedules', async (req, res) => {
     const models = [
       {
         id: 1,
-        modelId: 'accounts/fireworks/models/deepseek-v3p1',
-        modelName: 'DeepSeek v3.1'
-      },
-      {
-        id: 2,
         modelId: 'accounts/fireworks/models/qwen2p5-vl-32b-instruct',
         modelName: 'Qwen3 VL 30B A3B Instruct'
       },
       {
-        id: 3,
+        id: 2,
         modelId: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
         modelName: 'Llama v3.3 70B Instruct'
       }
