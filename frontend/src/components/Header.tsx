@@ -42,6 +42,13 @@ const FavoriteIcon = () => (
   </svg>
 );
 
+const WeatherIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 16.5A4.5 4.5 0 0 1 7.5 12h9a4.5 4.5 0 1 1 0 9h-9A4.5 4.5 0 0 1 3 16.5Z" />
+    <path d="M9 12a5 5 0 1 1 8-6" />
+  </svg>
+);
+
 export function Header({
   onGeneratePaths,
   onShowRestore,
@@ -57,6 +64,19 @@ export function Header({
   const [inputMessage, setInputMessage] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showWeather, setShowWeather] = useState(false);
+  const [weatherText, setWeatherText] = useState('Loading weather...');
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [tempUnit, setTempUnit] = useState<'F' | 'C'>('F');
+  const [currentConditions, setCurrentConditions] = useState<{
+    temp: number | null;
+    shortForecast: string;
+    windSpeed: string;
+    humidity: number | null;
+    icon?: string;
+  } | null>(null);
+  const [forecastPeriods, setForecastPeriods] = useState<any[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -80,9 +100,130 @@ export function Header({
     showToast('Generating schedule suggestions...', 'success');
   };
 
+  const handleWeatherClick = async () => {
+    setShowWeather(true);
+    setWeatherLoading(true);
+    setWeatherError(null);
+    setWeatherText('Loading weather...');
+    const today = selectedDate || new Date().toISOString().slice(0, 10);
+    try {
+      const pointResp = await fetch(`https://api.weather.gov/points/40.1163,-88.2435`);
+      if (!pointResp.ok) throw new Error(`points status ${pointResp.status}`);
+      const pointData = await pointResp.json();
+      const forecastUrl = pointData?.properties?.forecast;
+      if (!forecastUrl) throw new Error('No forecast URL');
+      const forecastResp = await fetch(forecastUrl);
+      if (!forecastResp.ok) throw new Error(`forecast status ${forecastResp.status}`);
+      const forecastData = await forecastResp.json();
+      const periods = forecastData?.properties?.periods || [];
+      setForecastPeriods(periods.slice(0, 8));
+
+      const now = periods?.[0];
+      setCurrentConditions({
+        temp: now?.temperature ?? null,
+        shortForecast: now?.shortForecast || 'N/A',
+        windSpeed: now?.windSpeed || 'N/A',
+        humidity: now?.relativeHumidity?.value ?? null,
+        icon: now?.icon,
+      });
+      setWeatherText(`Date ${today}: ${now?.shortForecast || 'N/A'} with temp ${now?.temperature ?? '?'}°${now?.temperatureUnit || 'F'}`);
+    } catch (err: any) {
+      setWeatherError('Weather unavailable; please check later or open the full forecast.');
+    }
+    setWeatherLoading(false);
+  };
+
+  const convertTemp = (value: number | null) => {
+    if (value == null) return '--';
+    return tempUnit === 'F' ? `${value}°F` : `${Math.round(((value - 32) * 5) / 9)}°C`;
+  };
+
   return (
     <header className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 text-white shadow-lg">
       {toast && <Toast message={toast.message} type={toast.type} />}
+      {showWeather && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[420px] text-slate-800 relative">
+            <button
+              className="absolute top-2 right-2 text-slate-500 hover:text-slate-700"
+              onClick={() => setShowWeather(false)}
+            >
+              ✕
+            </button>
+            <div className="flex items-center gap-2 mb-3">
+              <WeatherIcon />
+              <h3 className="text-lg font-semibold">Champaign / KCMI Weather</h3>
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs text-slate-600">Temperature unit:</span>
+              <button
+                type="button"
+                onClick={() => setTempUnit('F')}
+                className={`px-2 py-1 rounded border text-xs ${tempUnit === 'F' ? 'bg-slate-800 text-white border-slate-700' : 'bg-white border-slate-300 text-slate-700'}`}
+              >
+                °F
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempUnit('C')}
+                className={`px-2 py-1 rounded border text-xs ${tempUnit === 'C' ? 'bg-slate-800 text-white border-slate-700' : 'bg-white border-slate-300 text-slate-700'}`}
+              >
+                °C
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 flex gap-3 items-center">
+                <div className="w-16 h-16 rounded-md bg-white border border-slate-200 flex items-center justify-center overflow-hidden">
+                  {currentConditions?.icon ? (
+                    <img src={currentConditions.icon} alt="icon" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl">🌥️</span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-3xl font-semibold text-slate-800">
+                    {convertTemp(currentConditions?.temp ?? null)}
+                  </div>
+                  <div className="text-sm text-slate-600">{currentConditions?.shortForecast || weatherText}</div>
+                  <div className="text-xs text-slate-500">
+                    Wind: {currentConditions?.windSpeed || 'N/A'} · Humidity: {currentConditions?.humidity ?? 'N/A'}%
+                  </div>
+                </div>
+              </div>
+
+              {weatherLoading && <p className="text-sm text-slate-600">Loading weather...</p>}
+              {weatherError && <p className="text-sm text-red-600">{weatherError}</p>}
+
+              {!weatherLoading && !weatherError && forecastPeriods.length > 0 && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Extended forecast</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {forecastPeriods.map((p) => (
+                      <div key={p.number} className="rounded-lg border border-slate-200 p-2 bg-white/80">
+                        <div className="text-xs font-semibold text-slate-700">{p.name}</div>
+                        <div className="text-xs text-slate-500 mb-1">{p.shortForecast}</div>
+                        <div className="text-sm font-semibold text-orange-600">{convertTemp(p.temperature)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  window.open('https://forecast.weather.gov/MapClick.php?lat=40.116328&lon=-88.243522', '_blank')
+                }
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors"
+              >
+                Open full forecast
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="container mx-auto px-6 py-4">
         {/* Top row - Logo and title */}
@@ -103,9 +244,10 @@ export function Header({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => window.open('https://www.accuweather.com/en/us/champaign/61820/weather-forecast/328774', '_blank')}
+              onClick={handleWeatherClick}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#13294B] to-sky-500 hover:from-[#0f2140] hover:to-sky-400 rounded-lg transition-colors border border-sky-400 shadow-sm"
             >
+              <WeatherIcon />
               <span className="text-sm font-medium">Weather</span>
             </button>
             <button

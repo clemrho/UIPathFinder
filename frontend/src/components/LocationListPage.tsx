@@ -3,6 +3,7 @@ import { MapPin, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { listBuildingUsage } from '../api/buildings';
+import imageCsv from '../assets/uiuc_with_images.csv?raw';
 
 interface Location {
   id: number;
@@ -16,7 +17,19 @@ export default function LocationListPage() {
   const { getAccessTokenSilently } = useAuth0();
   const [usageMap, setUsageMap] = useState<Record<string, number>>({});
 
-  const defaultImage = 'https://upload.wikimedia.org/wikipedia/commons/8/8e/Alma_Mater_UIUC.jpg';
+  const fallbackPool = [
+    'https://fightingillini.com/images/2015/11/10/traditions_almastatue.jpg',
+    'https://www.collegeadvisor.com/wp-content/uploads/2023/02/HowtoGetIntoUIUC-scaled.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/8/8e/Campus_entrance_marker_at_Wright_Street_and_University_Avenue_University_of_Illinois_at_Urbana-Champaign.jpg',
+    'https://www.uillinois.edu/userfiles/Servers/Server_1240/image/i-mmas/UI-02-170827-219-2048x1365.jpg',
+    'https://static.wixstatic.com/media/255410_514ff444b578438693283aff62c235c4~mv2.png/v1/fill/w_568,h_318,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/255410_514ff444b578438693283aff62c235c4~mv2.png',
+  ];
+
+  const fallbackFor = (name: string) => {
+    // deterministic per name to avoid flicker, but varied across cards
+    const hash = name.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return fallbackPool[hash % fallbackPool.length];
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -38,7 +51,25 @@ export default function LocationListPage() {
     };
   }, [getAccessTokenSilently]);
 
-  const imageMap: Record<string, string> = {
+  // CSV-driven image map (lowercased keys)
+  const csvImageMap: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (!imageCsv) return map;
+    const lines = imageCsv.split('\n').slice(1); // skip header
+    lines.forEach((line) => {
+      const parts = line.split(',');
+      if (parts.length >= 2) {
+        const name = parts[0]?.trim().toLowerCase();
+        const url = parts[1]?.trim();
+        if (name && url) {
+          map[name] = url;
+        }
+      }
+    });
+    return map;
+  }, []);
+
+  const primaryImageMap: Record<string, string> = {
     'Grainger Engineering Library':
       'https://www.library.illinois.edu/enx/wp-content/uploads/sites/27/2025/06/GraingerExterior-1-e1749483744556.jpg',
     'Siebel Center for Computer Science':
@@ -49,14 +80,112 @@ export default function LocationListPage() {
       'https://living-future.org/wp-content/uploads/2023/02/North_Side.jpeg_202301051354-1024x558.jpeg',
     'Activities and Recreation Center (ARC)':
       'https://campusrec.illinois.edu/sites/default/files/styles/hero_image/public/paragraphs/hero/2022-05/ARC.jpg?h=e6b46478&itok=XgfrEVSA',
-    'Memorial Stadium': 'https://upload.wikimedia.org/wikipedia/commons/0/0c/Memorial_Stadium_UIUC.jpg'
+    'Memorial Stadium': 'https://upload.wikimedia.org/wikipedia/commons/0/0c/Memorial_Stadium_UIUC.jpg',
   };
 
-  const makeImage = (name: string) =>
-    imageMap[name] || defaultImage;
+  const secondaryImageMap: Record<string, string> = {
+    'Beckman Institute for Advanced Science and Technology':
+      'https://upload.wikimedia.org/wikipedia/commons/9/9d/Beckman_Institute_at_U_of_I.jpg',
+    'National Center for Supercomputing Applications (NCSA)':
+      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRK9w4_o1oSeGGC1NWS74magJQpQFiwcieAGQ&s',
+    'Coordinated Science Laboratory (CSL)':
+      'https://upload.wikimedia.org/wikipedia/commons/9/9f/Urbana_IL_Coordinated_Science_Lab.jpg',
+    'Engineering Hall':
+      'https://grainger.illinois.edu/_sitemanager/viewphoto.aspx?id=95378&s=1920&h=1200',
+    'Talbot Laboratory':
+      'https://upload.wikimedia.org/wikipedia/commons/5/5c/Talbot_Laboratory_UIUC.jpg',
+    'Bardeen Quadrangle':
+      'https://upload.wikimedia.org/wikipedia/commons/4/45/Engineering_Quad_at_U_of_I.jpg',
+    'Everitt Laboratory':
+      'https://upload.wikimedia.org/wikipedia/commons/2/23/Everitt_Lab_UIUC.jpg',
+    'Campus Instructional Facility (CIF)':
+      'https://upload.wikimedia.org/wikipedia/commons/2/2d/Campus_Instructional_Facility_UIUC.jpg',
+    'Digital Computer Laboratory':
+      'https://uihistories.library.illinois.edu/virtualtour/engineering/dcl/44797_l.jpg',
+    'HMNTL':
+      'https://upload.wikimedia.org/wikipedia/commons/6/68/HMNTL_UIUC.jpg',
+    'Civil and Environmental Engineering Building':
+      'https://upload.wikimedia.org/wikipedia/commons/8/82/CEE_Building_UIUC.jpg',
+    'Newmark Civil Engineering Laboratory':
+      'https://upload.wikimedia.org/wikipedia/commons/4/47/Newmark_CE_Lab_UIUC.jpg',
+    'Transportation Building':
+      'https://upload.wikimedia.org/wikipedia/commons/6/6f/Transportation_Building_UIUC.jpg',
+    'Ceramics Building':
+      'https://upload.wikimedia.org/wikipedia/commons/8/8d/Ceramics_Building_UIUC.jpg',
+    'Engineering Sciences Building (ESB)':
+      'https://upload.wikimedia.org/wikipedia/commons/2/2b/Engineering_Sciences_Building_UIUC.jpg',
+    'Engineering Student Projects Laboratory (ESPL)':
+      'https://upload.wikimedia.org/wikipedia/commons/1/1e/ESPL_UIUC.jpg',
+    'Loomis Laboratory':
+      'https://upload.wikimedia.org/wikipedia/commons/9/96/Loomis_Lab_UIUC.jpg',
+    'Sidney Lu Mechanical Engineering Building':
+      'https://upload.wikimedia.org/wikipedia/commons/7/7c/Sidney_Lu_MEB_UIUC.jpg',
+    'Materials Science and Engineering Building':
+      'https://upload.wikimedia.org/wikipedia/commons/f/fe/Materials_Science_and_Engineering_Building_UIUC.jpg',
+    'Campus Recreation Center East (CRCE)':
+      'https://upload.wikimedia.org/wikipedia/commons/6/67/CRCE_UIUC.jpg',
+    'Foellinger Auditorium':
+      'https://upload.wikimedia.org/wikipedia/commons/4/44/Foellinger_Auditorium_UIUC.JPG',
+    'Altgeld Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/8/83/Altgeld_Hall_UIUC.JPG',
+    'Lincoln Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/8/82/Lincoln_Hall_UIUC.jpg',
+    'Gregory Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/3/38/Gregory_Hall_UIUC.jpg',
+    'Business Instructional Facility (BIF)':
+      'https://upload.wikimedia.org/wikipedia/commons/9/9e/Business_Instructional_Facility_UIUC.jpg',
+    'Education Building':
+      'https://upload.wikimedia.org/wikipedia/commons/e/ec/Education_Building_UIUC.jpg',
+    'Armory':
+      'https://upload.wikimedia.org/wikipedia/commons/3/36/Armory_UIUC.jpg',
+    'Law Building':
+      'https://upload.wikimedia.org/wikipedia/commons/5/58/Law_Building_UIUC.jpg',
+    'ACES Library':
+      'https://upload.wikimedia.org/wikipedia/commons/6/62/ACES_Library_UIUC.jpg',
+    'Turner Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/0/0a/Turner_Hall_UIUC.jpg',
+    'Smith Memorial Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/8/88/Smith_Memorial_Hall_UIUC.jpg',
+    'Krannert Art Museum':
+      'https://upload.wikimedia.org/wikipedia/commons/9/9b/Krannert_Art_Museum_UIUC.jpg',
+    'Spurlock Museum':
+      'https://upload.wikimedia.org/wikipedia/commons/0/0c/Spurlock_Museum_UIUC.jpg',
+    'Huff Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/6/67/Huff_Hall_UIUC.JPG',
+    'Research Park':
+      'https://upload.wikimedia.org/wikipedia/commons/d/d2/Research_Park_UIUC.jpg',
+    'Illini Grove':
+      'https://upload.wikimedia.org/wikipedia/commons/9/9d/Illini_Grove_UIUC.jpg',
+    'South Quad':
+      'https://upload.wikimedia.org/wikipedia/commons/2/26/South_Quad_UIUC.jpg',
+    'North Quad':
+      'https://upload.wikimedia.org/wikipedia/commons/3/36/North_Quad_UIUC.jpg',
+    'Library (Main Library)':
+      'https://upload.wikimedia.org/wikipedia/commons/4/42/Main_Library_UIUC.jpg',
+    'ISR Dining':
+      'https://upload.wikimedia.org/wikipedia/commons/7/7a/ISR_UIUC.jpg',
+    'PAR Dining Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/1/14/PAR_UIUC.jpg',
+    'FAR Dining Hall':
+      'https://upload.wikimedia.org/wikipedia/commons/0/0e/FAR_UIUC.jpg',
+    'Japan House':
+      'https://upload.wikimedia.org/wikipedia/commons/3/3b/Japan_House_UIUC.jpg',
+    'Krannert Center for the Performing Arts':
+      'https://upload.wikimedia.org/wikipedia/commons/5/52/Krannert_Center_UIUC.jpg'
+  };
 
-  const locations: Location[] = useMemo(() => {
-    const names: { name: string; category: string }[] = [
+  const makeImage = (name: string) => {
+    const key = name.toLowerCase();
+    return (
+      csvImageMap[key] ||
+      primaryImageMap[name] ||
+      secondaryImageMap[name] ||
+      fallbackFor(name)
+    );
+  };
+
+  const locationDefs: { name: string; category: string }[] = useMemo(
+    () => [
       { name: 'Grainger Engineering Library', category: 'Library' },
       { name: 'Siebel Center for Computer Science', category: 'Academic Building' },
       { name: 'Main Quad', category: 'Outdoor Space' },
@@ -111,20 +240,34 @@ export default function LocationListPage() {
       { name: 'ISR Dining', category: 'Dining' },
       { name: 'PAR Dining Hall', category: 'Dining' },
       { name: 'FAR Dining Hall', category: 'Dining' }
-    ];
+    ],
+    []
+  );
 
-    return names.map((item, idx) => ({
-      id: idx + 1,
-      name: item.name,
-      category: item.category,
-      imageUrl: makeImage(item.name)
-    }));
-  }, []);
+  const randomBaseCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    locationDefs.forEach((item) => {
+      map[item.name.toLowerCase()] = Math.floor(Math.random() * 6) + 1; // 1-6
+    });
+    return map;
+  }, [locationDefs]);
+
+  const locations: Location[] = useMemo(
+    () =>
+      locationDefs.map((item, idx) => ({
+        id: idx + 1,
+        name: item.name,
+        category: item.category,
+        imageUrl: makeImage(item.name)
+      })),
+    [locationDefs]
+  );
 
   const displayCount = (name: string) => {
     const key = name.toLowerCase();
+    const base = randomBaseCounts[key] || 1;
     const stored = usageMap[key] || 0;
-    return stored + 1; // default baseline count is 1
+    return stored + base;
   };
 
   return (
@@ -159,8 +302,9 @@ export default function LocationListPage() {
                   src={location.imageUrl || defaultImage}
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
-                    if (target.src !== defaultImage) {
-                      target.src = defaultImage;
+                    const fallback = fallbackFor(location.name);
+                    if (target.src !== fallback) {
+                      target.src = fallback;
                     }
                   }}
                   alt={location.name}

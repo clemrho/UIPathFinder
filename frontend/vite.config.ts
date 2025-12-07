@@ -49,6 +49,7 @@ export default defineConfig({
       '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
       '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
       '@': path.resolve(__dirname, './src'),
+      '@uiuc-buildings-csv': path.resolve(__dirname, '../database/uiuc_with_images.csv'),
     },
   },
   build: {
@@ -58,6 +59,12 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    fs: {
+      allow: [
+        path.resolve(__dirname, '..'),
+        path.resolve(__dirname, '../database'),
+      ],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

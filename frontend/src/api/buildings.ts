@@ -7,16 +7,19 @@ async function maybeGetToken(getToken: any) {
       audience: import.meta.env.VITE_AUTH0_AUDIENCE || "urn:uipathfinder-api",
     });
   } catch (e) {
-    console.warn("token fetch failed, falling back to guest", e);
     return null;
   }
 }
 
 export async function listBuildingUsage(getToken: any) {
-  const token = await maybeGetToken(getToken);
-  const res = await fetch(`${API_BASE}/building-usage`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  // Try guest first to avoid consent popups; fallback to token on 401.
+  let res = await fetch(`${API_BASE}/building-usage`);
+  if (res.status === 401) {
+    const token = await maybeGetToken(getToken);
+    res = await fetch(`${API_BASE}/building-usage`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  }
   if (!res.ok) throw new Error(`Usage fetch failed: ${res.status}`);
   return res.json();
 }
