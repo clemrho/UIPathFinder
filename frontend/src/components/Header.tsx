@@ -86,6 +86,20 @@ export function Header({ onGeneratePaths, onShowRestore, onShowFavorites, onLogo
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => window.open('https://www.accuweather.com/en/us/champaign/61820/weather-forecast/328774', '_blank')}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-500/80 hover:bg-cyan-500 rounded-lg transition-colors border border-cyan-300 shadow-sm"
+            >
+              <span className="text-sm font-medium">Weather</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open('https://mtd.org', '_blank')}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-600 rounded-lg transition-colors border border-purple-400 shadow-sm"
+            >
+              <span className="text-sm font-medium">Bus Route</span>
+            </button>
+            <button
+              type="button"
               onClick={onShowFavorites}
               className="flex items-center gap-2 px-4 py-2 bg-orange-500/80 hover:bg-orange-500 rounded-lg transition-colors border border-orange-400 shadow-sm"
             >

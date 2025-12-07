@@ -1,7 +1,5 @@
 /* Add Noto Sans font for .noto-sans-uniquifier */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap');
-/* Cute rounded font option */
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 .noto-sans-uniquifier {
@@ -13,5 +11,26 @@
 }
 
 .illini-cute {
-  font-family: "Fredoka", "Noto Sans", "Trebuchet MS", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Prefer Apple system font; fall back to clear sans options */
+body, button, input, select, textarea {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  font-size: 17px;
+}
+
+body {
+  line-height: 1.6;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: 1rem;
+  min-height: 44px;
 }
