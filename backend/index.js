@@ -630,7 +630,7 @@ app.post('/api/llm-schedules', async (req, res) => {
   }
 });
 
-// Start server
+// Start server (Render/Heroku style PORT)
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
   console.log(`Backend running on http://localhost:${port}`);
