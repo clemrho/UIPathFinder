@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 
 interface Location {
   name: string;
@@ -32,7 +32,7 @@ function latLngToPixel(
   centerLat: number,
   centerLng: number,
   width: number,
-  height: number
+  height: number,
 ) {
   const scale = 256 * Math.pow(2, zoom);
 
@@ -40,8 +40,7 @@ function latLngToPixel(
   const worldY =
     ((1 -
       Math.log(
-        Math.tan((lat * Math.PI) / 180) +
-          1 / Math.cos((lat * Math.PI) / 180)
+        Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180),
       ) /
         Math.PI) /
       2) *
@@ -52,7 +51,7 @@ function latLngToPixel(
     ((1 -
       Math.log(
         Math.tan((centerLat * Math.PI) / 180) +
-          1 / Math.cos((centerLat * Math.PI) / 180)
+          1 / Math.cos((centerLat * Math.PI) / 180),
       ) /
         Math.PI) /
       2) *
@@ -60,7 +59,7 @@ function latLngToPixel(
 
   return {
     x: width / 2 + (worldX - centerWorldX),
-    y: height / 2 + (worldY - centerWorldY)
+    y: height / 2 + (worldY - centerWorldY),
   };
 }
 
@@ -70,12 +69,11 @@ function getTileCoords(lat: number, lng: number, zoom: number) {
   const y = Math.floor(
     ((1 -
       Math.log(
-        Math.tan((lat * Math.PI) / 180) +
-          1 / Math.cos((lat * Math.PI) / 180)
+        Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180),
       ) /
         Math.PI) /
       2) *
-      Math.pow(2, zoom)
+      Math.pow(2, zoom),
   );
   return { x, y };
 }
@@ -88,7 +86,7 @@ function getBounds(locations: Location[]) {
     minLat: Math.min(...lats),
     maxLat: Math.max(...lats),
     minLng: Math.min(...lngs),
-    maxLng: Math.max(...lngs)
+    maxLng: Math.max(...lngs),
   };
 }
 
@@ -120,7 +118,7 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
     startX: 0,
     startY: 0,
     startOffsetX: 0,
-    startOffsetY: 0
+    startOffsetY: 0,
   });
 
   useEffect(() => {
@@ -129,13 +127,13 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
         const rect = containerRef.current.getBoundingClientRect();
         setDimensions({
           width: rect.width || 800,
-          height: rect.height || 400
+          height: rect.height || 400,
         });
       }
     };
     updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
   }, []);
 
   // 鼠标滚轮缩放
@@ -152,8 +150,8 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
       });
     };
 
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
   // 全局 mouseup：无论在哪松手，都结束拖动（兜底）
@@ -161,11 +159,11 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
     const onMouseUp = () => {
       dragState.current.dragging = false;
     };
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('mouseleave', onMouseUp);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mouseleave", onMouseUp);
     return () => {
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('mouseleave', onMouseUp);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mouseleave", onMouseUp);
     };
   }, []);
 
@@ -178,7 +176,7 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
       startX: e.clientX,
       startY: e.clientY,
       startOffsetX: panOffset.x,
-      startOffsetY: panOffset.y
+      startOffsetY: panOffset.y,
     };
   };
 
@@ -200,16 +198,8 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
     const maxPanX = width * 0.4;
     const maxPanY = height * 0.4;
 
-    const nextX = clamp(
-      dragState.current.startOffsetX + dx,
-      -maxPanX,
-      maxPanX
-    );
-    const nextY = clamp(
-      dragState.current.startOffsetY + dy,
-      -maxPanY,
-      maxPanY
-    );
+    const nextX = clamp(dragState.current.startOffsetX + dx, -maxPanX, maxPanX);
+    const nextY = clamp(dragState.current.startOffsetY + dy, -maxPanY, maxPanY);
 
     setPanOffset({ x: nextX, y: nextY });
   };
@@ -258,20 +248,12 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
 
   // 像素坐标 + 拖动偏移
   const basePixelLocations = locations.map((loc) =>
-    latLngToPixel(
-      loc.lat,
-      loc.lng,
-      zoom,
-      centerLat,
-      centerLng,
-      width,
-      height
-    )
+    latLngToPixel(loc.lat, loc.lng, zoom, centerLat, centerLng, width, height),
   );
   const pixelLocations = locations.map((loc, index) => ({
     ...loc,
     x: basePixelLocations[index].x + panOffset.x,
-    y: basePixelLocations[index].y + panOffset.y
+    y: basePixelLocations[index].y + panOffset.y,
   }));
 
   // segments 映射表："fromIndex-toIndex" -> segment
@@ -283,21 +265,21 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
   });
 
   const trafficColors = {
-    light: '#10b981',
-    moderate: '#fbbf24',
-    heavy: '#ef4444'
+    light: "#10b981",
+    moderate: "#fbbf24",
+    heavy: "#ef4444",
   };
 
   const trafficLabels = {
-    light: 'Smooth',
-    moderate: 'Slow',
-    heavy: 'Congested'
+    light: "Smooth",
+    moderate: "Slow",
+    heavy: "Congested",
   };
 
   const getRouteGradient = (status: string) => {
-    if (status === 'light') return ['#10b981', '#22c55e'];
-    if (status === 'moderate') return ['#fbbf24', '#f59e0b'];
-    return ['#ef4444', '#dc2626'];
+    if (status === "light") return ["#10b981", "#22c55e"];
+    if (status === "moderate") return ["#fbbf24", "#f59e0b"];
+    return ["#ef4444", "#dc2626"];
   };
 
   return (
@@ -347,7 +329,7 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
                   height: tileSize,
                   left: `${tilePixelX}px`,
                   top: `${tilePixelY}px`,
-                  opacity: 0.9
+                  opacity: 0.9,
                 }}
                 crossOrigin="anonymous"
               />
@@ -419,7 +401,7 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
                     centerLat,
                     centerLng,
                     width,
-                    height
+                    height,
                   );
                   const x = p.x + panOffset.x;
                   const y = p.y + panOffset.y;
@@ -427,7 +409,7 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
                   return `${x},${y}`;
                 })
                 .filter(Boolean)
-                .join(' ');
+                .join(" ");
 
               // 极端情况下 route 都无效，退回直线
               if (!polyPoints) {
@@ -544,26 +526,26 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
 
         {/* 位置标签 */}
         {pixelLocations.map((loc, index) => (
-  <div
-    key={`label-${index}`}
-    className="absolute bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-md shadow-md text-xs pointer-events-none border border-gray-100"
-    style={{
-      left: `${(loc.x / width) * 100}%`,
-      top: `${(loc.y / height) * 100}%`,
-      transform: 'translate(-50%, -140%)',
-      maxWidth: '140px'
-    }}
-  >
-    <div className="truncate text-gray-800">{loc.name}</div>
-  </div>
-))}
+          <div
+            key={`label-${index}`}
+            className="absolute bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-md shadow-md text-xs pointer-events-none border border-gray-100"
+            style={{
+              left: `${(loc.x / width) * 100}%`,
+              top: `${(loc.y / height) * 100}%`,
+              transform: "translate(-50%, -140%)",
+              maxWidth: "140px",
+            }}
+          >
+            <div className="truncate text-gray-800">{loc.name}</div>
+          </div>
+        ))}
 
         {/* Hover 信息 */}
         {hoveredSegment !== null && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white/95 backdrop-blur-sm px-4 py-3 rounded-lg shadow-lg border border-gray-200 pointer-events-auto">
             <div className="text-sm">
               <div className="text-gray-800 mb-1.5">
-                {locations[hoveredSegment].name} →{' '}
+                {locations[hoveredSegment].name} →{" "}
                 {locations[hoveredSegment + 1].name}
               </div>
               <div className="flex items-center gap-2 mb-1">
@@ -572,14 +554,16 @@ export function RouteMap({ locations, pathId, segments }: RouteMapProps) {
                   style={{
                     backgroundColor:
                       trafficColors[
-                        trafficData[hoveredSegment].status as keyof typeof trafficColors
-                      ]
+                        trafficData[hoveredSegment]
+                          .status as keyof typeof trafficColors
+                      ],
                   }}
                 />
                 <span className="text-sm text-gray-700">
                   {
                     trafficLabels[
-                      trafficData[hoveredSegment].status as keyof typeof trafficLabels
+                      trafficData[hoveredSegment]
+                        .status as keyof typeof trafficLabels
                     ]
                   }
                 </span>
