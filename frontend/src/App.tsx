@@ -6,7 +6,9 @@ import { Header } from './components/Header';
 import { MainContent } from './components/MainContent';
 import { LoginPage } from './components/LoginPage';
 import { SearchHistoryPage } from './components/SearchHistoryPage';
+import LocationListPage from './components/LocationListPage';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+//import SearchPage from './components/SearchPage';
 
 interface ScheduleItem {
   time: string;
@@ -238,6 +240,11 @@ export default function App() {
     navigate("/");
   };
 
+  const handleShowFavorites = () => {
+    setShowRestore(false);
+    navigate("/favorites");
+  };
+
   const mainElement = isLoading ? (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-gray-500">Loading...</div>
@@ -254,6 +261,7 @@ export default function App() {
       <Header
         onGeneratePaths={handleGeneratePaths}
         onShowRestore={handleShowRestore}
+        onShowFavorites={handleShowFavorites}
         onLogout={handleLogout}
       />
       <MainContent
@@ -278,6 +286,16 @@ export default function App() {
               searchHistory={searchHistory}
               onRestoreSearch={handleRestoreFromHistory}
             />
+          )
+        }
+      />
+      <Route
+        path="/favorites"
+        element={
+          !isAuthed ? (
+            <Navigate to="/login" replace />
+          ) : (
+            <LocationListPage />
           )
         }
       />

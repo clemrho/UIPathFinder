@@ -1,5 +1,6 @@
 // no React hooks needed here
 import { EnhancedPathSuggestions } from './EnhancedPathSuggestions';
+import { RecommendedSpots } from './RecommendedSpots';
 
 interface ScheduleItem {
   time: string;
@@ -57,6 +58,7 @@ export function MainContent({ pathOptions, showRestore, onSelectPlan }: MainCont
           <p className="text-gray-500">
             Enter your schedule requirements and date above, and AI will generate personalized path suggestions for you
           </p>
+          <RecommendedSpots />
         </div>
       </div>
     );
