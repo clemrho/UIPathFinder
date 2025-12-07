@@ -58,6 +58,7 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
   const [expandedPaths, setExpandedPaths] = useState<Record<number, boolean>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const allowSelection = typeof onSelectPlan === 'function';
 
   const togglePath = (pathId: number) => {
     setExpandedPaths(prev => ({
@@ -159,21 +160,23 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
                 </div>
 
                 {/* Action buttons */}
-                <div className="mt-5 flex gap-3">
-                  <button
-                    className={`flex-1 px-4 py-2.5 rounded-lg transition-colors shadow-sm noto-sans-uniquifier ${isSelected ? 'bg-gray-400 text-white cursor-default' : 'bg-orange-500 text-white hover:bg-orange-600'} ${savingId === path.id ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    disabled={savingId === path.id || isSelected}
-                    onClick={async () => {
-                      if (savingId !== null || isSelected) return;
-                      setSavingId(path.id);
-                      await onSelectPlan?.(path);
-                      setSavingId(null);
-                      setSelectedId(path.id);
-                    }}
-                  >
-                    {isSelected ? 'SELECTED' : savingId === path.id ? 'Saving...' : 'Select This Plan'}
-                  </button>
-                </div>
+                {allowSelection && (
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      className={`flex-1 px-4 py-2.5 rounded-lg transition-colors shadow-sm noto-sans-uniquifier ${isSelected ? 'bg-gray-400 text-white cursor-default' : 'bg-orange-500 text-white hover:bg-orange-600'} ${savingId === path.id ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={savingId === path.id || isSelected}
+                      onClick={async () => {
+                        if (savingId !== null || isSelected) return;
+                        setSavingId(path.id);
+                        await onSelectPlan?.(path);
+                        setSavingId(null);
+                        setSelectedId(path.id);
+                      }}
+                    >
+                      {isSelected ? 'SELECTED' : savingId === path.id ? 'Saving...' : 'Select This Plan'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

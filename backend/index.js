@@ -2,26 +2,22 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const jwksRsa = require('jwks-rsa');
 const { buildFireworksPrompt } = require('../LLM/llmama');
-
-const User = require('./models/user');
-const History = require('./models/history');
+const {
+  findOrCreateUser,
+  insertHistory,
+  listHistories,
+  getHistory,
+  incrementBuildingUsage,
+  listBuildingUsage
+} = require('./db');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
-
-// MongoDB connection
-const mongoUri =
-  process.env.MONGODB_URI || 'mongodb://localhost:27017/uipathfinder';
-mongoose
-  .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('MongoDB connection error:', err));
 
 // Auth0 JWT verification using jwks-rsa + jsonwebtoken
 const jwksClient = jwksRsa({
@@ -38,21 +34,33 @@ function getKey(header, callback) {
   });
 }
 
-function checkJwt(req, res, next) {
+// Optional auth: use Auth0 token if provided; otherwise fall back to a local guest user
+async function resolveUser(req, res) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer '))
-    return res.status(401).json({ error: 'missing_token' });
-  const token = authHeader.split(' ')[1];
-  const audience = process.env.AUTH0_AUDIENCE || 'urn:uipathfinder-api';
-  const issuer = `https://${process.env.AUTH0_DOMAIN}/`;
-  jwt.verify(token, getKey, { audience, issuer }, (err, decoded) => {
-    if (err) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const audience = process.env.AUTH0_AUDIENCE || 'urn:uipathfinder-api';
+    const issuer = `https://${process.env.AUTH0_DOMAIN}/`;
+    try {
+      const decoded = await new Promise((resolve, reject) => {
+        jwt.verify(token, getKey, { audience, issuer }, (err, payload) => {
+          if (err) reject(err);
+          else resolve(payload);
+        });
+      });
+      req.auth = { payload: decoded };
+      return await findOrCreateUser(
+        decoded.sub,
+        decoded.email || null,
+        decoded.name || null
+      );
+    } catch (err) {
       console.error('JWT verify error:', err);
-      return res.status(401).json({ error: 'invalid_token' });
+      throw new Error('invalid_token');
     }
-    req.auth = { payload: decoded };
-    next();
-  });
+  }
+  // guest user for local usage without Auth0
+  return await findOrCreateUser('guest-local', null, 'Local Guest');
 }
 
 // Unprotected example API
@@ -62,86 +70,93 @@ app.get('/api/hello', (req, res) => {
 
 // Protected routes for histories
 // Create a new history (save search + path options)
-app.post('/api/histories', checkJwt, async (req, res) => {
+app.post('/api/histories', async (req, res) => {
   try {
-    const authPayload = req.auth && req.auth.payload;
-    const auth0Sub = authPayload && authPayload.sub;
-    if (!auth0Sub) return res.status(401).json({ error: 'Unauthorized' });
+    const user = await resolveUser(req, res);
 
-    // Upsert user
-    const email = authPayload.email || req.body.email || null;
-    const name = authPayload.name || req.body.name || null;
-    let user = await User.findOne({ auth0Sub });
-    if (!user) {
-      user = await User.create({ auth0Sub, email, name });
-    }
-
-    const { title, subtitle, userRequest, requestedDate, metadata, pathOptions } =
-      req.body;
-    const history = await History.create({
-      user: user._id,
-      title: title || userRequest || '',
-      subtitle: subtitle || '',
+    const {
+      title,
+      subtitle,
       userRequest,
-      requestedDate: requestedDate ? new Date(requestedDate) : undefined,
-      metadata: metadata || {},
-      pathOptions: Array.isArray(pathOptions) ? pathOptions : []
+      requestedDate,
+      metadata,
+      pathOptions
+    } = req.body;
+
+    const inserted = await insertHistory(user.id, {
+      title,
+      subtitle,
+      userRequest,
+      requestedDate,
+      metadata,
+      pathOptions
     });
 
+    await incrementBuildingUsage(user.id, Array.isArray(pathOptions) ? pathOptions : []);
+
     // Return the full history document so the frontend can update its local state
-    res.status(201).json(history);
+    res.status(201).json(inserted);
   } catch (err) {
     console.error(err);
+    if (err.message === 'invalid_token') {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
     res.status(500).json({ error: 'server_error' });
   }
 });
 
 // List histories for authenticated user
-app.get('/api/histories', checkJwt, async (req, res) => {
+app.get('/api/histories', async (req, res) => {
   try {
-    const authPayload = req.auth && req.auth.payload;
-    const auth0Sub = authPayload && authPayload.sub;
-    if (!auth0Sub) return res.status(401).json({ error: 'Unauthorized' });
-
-    const user = await User.findOne({ auth0Sub });
+    const user = await resolveUser(req, res);
     if (!user) return res.json([]);
 
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
 
-    const rows = await History.find({ user: user._id })
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .select('-__v')
-      .lean();
+    const rows = await listHistories(user.id, limit, offset);
 
     res.json(rows);
   } catch (err) {
     console.error(err);
+    if (err.message === 'invalid_token') {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
     res.status(500).json({ error: 'server_error' });
   }
 });
 
 // Get a single history by id (only if belongs to user)
-app.get('/api/histories/:id', checkJwt, async (req, res) => {
+app.get('/api/histories/:id', async (req, res) => {
   try {
-    const authPayload = req.auth && req.auth.payload;
-    const auth0Sub = authPayload && authPayload.sub;
-    if (!auth0Sub) return res.status(401).json({ error: 'Unauthorized' });
-
-    const user = await User.findOne({ auth0Sub });
+    const user = await resolveUser(req, res);
     if (!user) return res.status(404).json({ error: 'Not found' });
 
-    const history = await History.findOne({
-      _id: req.params.id,
-      user: user._id
-    }).lean();
+    const history = await getHistory(user.id, req.params.id);
     if (!history) return res.status(404).json({ error: 'Not found' });
 
     res.json(history);
   } catch (err) {
     console.error(err);
+    if (err.message === 'invalid_token') {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Building usage stats
+app.get('/api/building-usage', async (req, res) => {
+  try {
+    const user = await resolveUser(req, res);
+    if (!user) return res.json([]);
+    const rows = await listBuildingUsage(user.id);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    if (err.message === 'invalid_token') {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
     res.status(500).json({ error: 'server_error' });
   }
 });

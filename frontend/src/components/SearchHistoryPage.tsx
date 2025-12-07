@@ -48,38 +48,38 @@ export function SearchHistoryPage({
   useEffect(() => {
     let mounted = true;
     async function load() {
-      // if user is authenticated, fetch from backend; otherwise use provided prop
-      if (isAuthenticated && typeof getAccessTokenSilently === "function") {
-        setLoading(true);
-        setError(null);
-        try {
-          const rows = await listHistories(getAccessTokenSilently, {
+      setLoading(true);
+      setError(null);
+      try {
+        const rows = await listHistories(
+          typeof getAccessTokenSilently === "function"
+            ? getAccessTokenSilently
+            : null,
+          {
             limit: 50,
             offset: 0,
-          });
-          if (!mounted) return;
-          // Normalize timestamps to Date objects
-          const mapped: SearchHistoryEntry[] = rows.map((r: any) => ({
-            id: r._id || r.id,
-            timestamp: r.createdAt ? new Date(r.createdAt) : new Date(),
-            userRequest: r.userRequest || r.user_request || '',
-            date: r.requestedDate || '',
-            pathOptions: (r.pathOptions || r.path_options || []).map((p: any, idx: number) => ({
-              id: idx,
-              title: p.title,
-              schedule: p.schedule || []
-            }))
-          }));
-          setHistories(mapped);
-        } catch (err: any) {
-          console.error("Failed to load histories", err);
-          setError(err?.message || "Failed to load histories");
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        // use provided prop fallback
+          },
+        );
+        if (!mounted) return;
+        // Normalize timestamps to Date objects
+        const mapped: SearchHistoryEntry[] = rows.map((r: any) => ({
+          id: r._id || r.id,
+          timestamp: r.createdAt ? new Date(r.createdAt) : new Date(),
+          userRequest: r.userRequest || r.user_request || '',
+          date: r.requestedDate || '',
+          pathOptions: (r.pathOptions || r.path_options || []).map((p: any, idx: number) => ({
+            id: idx,
+            title: p.title,
+            schedule: p.schedule || []
+          }))
+        }));
+        setHistories(mapped);
+      } catch (err: any) {
+        console.error("Failed to load histories", err);
+        setError(err?.message || "Failed to load histories");
         setHistories(searchHistory || []);
+      } finally {
+        setLoading(false);
       }
     }
     load();
@@ -235,45 +235,40 @@ export function SearchHistoryPage({
                               key={entry.id}
                               className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                               onClick={async () => {
-                                // fetch full history details from backend if authenticated
-                                if (
-                                  isAuthenticated &&
-                                  typeof getAccessTokenSilently === "function"
-                                ) {
-                                  try {
-                                    const full = await getHistory(
-                                      getAccessTokenSilently,
-                                      entry.id,
-                                    );
-                                    // normalize and pass to restore
-                                    const normalized: SearchHistoryEntry = {
-                                      id: full._id || full.id,
-                                      timestamp: full.createdAt
-                                        ? new Date(full.createdAt)
-                                        : new Date(),
-                                      userRequest:
-                                        full.userRequest ||
-                                        full.user_request ||
-                                        "",
-                                      date: full.requestedDate || "",
-                                      pathOptions: (
-                                        full.pathOptions ||
-                                        full.path_options ||
-                                        []
-                                      ).map((p: any, idx: number) => ({
-                                        id: idx,
-                                        title: p.title,
-                                        schedule: p.schedule || [],
-                                      })),
-                                    };
-                                    onRestoreSearch(normalized);
-                                  } catch (err) {
-                                    console.error(
-                                      "Failed to load history",
-                                      err,
-                                    );
-                                  }
-                                } else {
+                                try {
+                                  const full = await getHistory(
+                                    typeof getAccessTokenSilently === "function"
+                                      ? getAccessTokenSilently
+                                      : null,
+                                    entry.id,
+                                  );
+                                  // normalize and pass to restore
+                                  const normalized: SearchHistoryEntry = {
+                                    id: full._id || full.id,
+                                    timestamp: full.createdAt
+                                      ? new Date(full.createdAt)
+                                      : new Date(),
+                                    userRequest:
+                                      full.userRequest ||
+                                      full.user_request ||
+                                      "",
+                                    date: full.requestedDate || "",
+                                    pathOptions: (
+                                      full.pathOptions ||
+                                      full.path_options ||
+                                      []
+                                    ).map((p: any, idx: number) => ({
+                                      id: idx,
+                                      title: p.title,
+                                      schedule: p.schedule || [],
+                                    })),
+                                  };
+                                  onRestoreSearch(normalized);
+                                } catch (err) {
+                                  console.error(
+                                    "Failed to load history",
+                                    err,
+                                  );
                                   onRestoreSearch(entry);
                                 }
                               }}

@@ -1,89 +1,129 @@
+import { useEffect, useMemo, useState } from 'react';
 import { MapPin, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
+import { listBuildingUsage } from '../api/buildings';
 
 interface Location {
   id: number;
   name: string;
   category: string;
   imageUrl: string;
-  visitCount: number;
 }
 
 export default function LocationListPage() {
   const navigate = useNavigate();
+  const { getAccessTokenSilently } = useAuth0();
+  const [usageMap, setUsageMap] = useState<Record<string, number>>({});
 
-  const locations: Location[] = [
-    {
-      id: 1,
-      name: 'Grainger Engineering Library',
-      category: 'Library',
-      imageUrl: 'https://www.library.illinois.edu/enx/wp-content/uploads/sites/27/2025/06/GraingerExterior-1-e1749483744556.jpg',
-      visitCount: 42
-    },
-    {
-      id: 2,
-      name: 'Siebel Center for Computer Science',
-      category: 'Academic Building',
-      imageUrl: 'https://grainger.illinois.edu/_sitemanager/viewphoto.aspx?id=95344&s=1200',
-      visitCount: 38
-    },
-    {
-      id: 3,
-      name: 'Main Quad',
-      category: 'Outdoor Space',
-      imageUrl: 'http://fightingillini.com/images/2015/11/10/illinois_campus_quad.jpg',
-      visitCount: 25
-    },
-    {
-      id: 4,
-      name: 'Activities and Recreation Center (ARC)',
-      category: 'Recreation',
-      imageUrl: 'https://campusrec.illinois.edu/sites/default/files/styles/hero_image/public/paragraphs/hero/2022-05/ARC.jpg?h=e6b46478&itok=XgfrEVSA',
-      visitCount: 31
-    },
-    {
-      id: 5,
-      name: 'Illini Union',
-      category: 'Student Center',
-      imageUrl: 'http://fightingillini.com/images/2015/11/10/illinois_campus_quad.jpg',
-      visitCount: 56
-    },
-    {
-      id: 6,
-      name: 'Memorial Stadium',
-      category: 'Sports Venue',
-      imageUrl: 'https://images.unsplash.com/photo-1662318615953-ea4938514ac9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwc3RhZGl1bXxlbnwxfHx8fDE3NjUxMDU0MTF8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      visitCount: 12
-    },
-    {
-      id: 7,
-      name: 'Ikenberry Dining Center',
-      category: 'Dining',
-      imageUrl: 'https://images.unsplash.com/photo-1685879226944-30c32b186aa7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwY2FmZXRlcmlhfGVufDF8fHx8MTc2NTA4ODMzNHww&ixlib=rb-4.1.0&q=80&w=1080',
-      visitCount: 68
-    },
-    {
-      id: 8,
-      name: 'Electrical and Computer Engineering Building',
-      category: 'Academic Building',
-      imageUrl: 'https://living-future.org/wp-content/uploads/2023/02/North_Side.jpeg_202301051354-1024x558.jpeg',
-      visitCount: 29
-    },
-    {
-      id: 9,
-      name: 'Japan House',
-      category: 'Cultural Center',
-      imageUrl: 'https://images.unsplash.com/photo-1659843979793-8b3ffd321e73?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjYW1wdXMlMjBnYXJkZW58ZW58MXx8fHwxNzY1MTA1NDEyfDA&ixlib=rb-4.1.0&q=80&w=1080',
-      visitCount: 15
-    },
-    {
-      id: 10,
-      name: 'Krannert Center for the Performing Arts',
-      category: 'Theater',
-      imageUrl: 'https://images.unsplash.com/photo-1603647228760-f267ba43bf5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwdGhlYXRlcnxlbnwxfHx8fDE3NjUxMDU0MTJ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      visitCount: 18
-    }
-  ];
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const rows = await listBuildingUsage(getAccessTokenSilently);
+        if (!mounted) return;
+        const map: Record<string, number> = {};
+        rows.forEach((r: any) => {
+          if (r && r.key) map[r.key] = r.count || 0;
+        });
+        setUsageMap(map);
+      } catch (e) {
+        console.warn('Failed to load building usage', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [getAccessTokenSilently]);
+
+  const imageMap: Record<string, string> = {
+    'Grainger Engineering Library':
+      'https://www.library.illinois.edu/enx/wp-content/uploads/sites/27/2025/06/GraingerExterior-1-e1749483744556.jpg',
+    'Siebel Center for Computer Science':
+      'https://grainger.illinois.edu/_sitemanager/viewphoto.aspx?id=95344&s=1200',
+    'Main Quad': 'http://fightingillini.com/images/2015/11/10/illinois_campus_quad.jpg',
+    'Illini Union': 'http://fightingillini.com/images/2015/11/10/illinois_campus_quad.jpg',
+    'Electrical and Computer Engineering Building':
+      'https://living-future.org/wp-content/uploads/2023/02/North_Side.jpeg_202301051354-1024x558.jpeg',
+    'Activities and Recreation Center (ARC)':
+      'https://campusrec.illinois.edu/sites/default/files/styles/hero_image/public/paragraphs/hero/2022-05/ARC.jpg?h=e6b46478&itok=XgfrEVSA'
+  };
+
+  const makeImage = (name: string) =>
+    imageMap[name] ||
+    `https://source.unsplash.com/featured/?${encodeURIComponent(name + ' uiuc campus')}`;
+
+  const locations: Location[] = useMemo(() => {
+    const names: { name: string; category: string }[] = [
+      { name: 'Grainger Engineering Library', category: 'Library' },
+      { name: 'Siebel Center for Computer Science', category: 'Academic Building' },
+      { name: 'Main Quad', category: 'Outdoor Space' },
+      { name: 'Activities and Recreation Center (ARC)', category: 'Recreation' },
+      { name: 'Illini Union', category: 'Student Center' },
+      { name: 'Memorial Stadium', category: 'Sports Venue' },
+      { name: 'Ikenberry Dining Center', category: 'Dining' },
+      { name: 'Electrical and Computer Engineering Building', category: 'Academic Building' },
+      { name: 'Japan House', category: 'Cultural Center' },
+      { name: 'Krannert Center for the Performing Arts', category: 'Theater' },
+      { name: 'Beckman Institute for Advanced Science and Technology', category: 'Research' },
+      { name: 'National Center for Supercomputing Applications (NCSA)', category: 'Research' },
+      { name: 'Coordinated Science Laboratory (CSL)', category: 'Research' },
+      { name: 'Engineering Hall', category: 'Academic Building' },
+      { name: 'Talbot Laboratory', category: 'Academic Building' },
+      { name: 'Bardeen Quadrangle', category: 'Outdoor Space' },
+      { name: 'Everitt Laboratory', category: 'Academic Building' },
+      { name: 'Campus Instructional Facility (CIF)', category: 'Academic Building' },
+      { name: 'Digital Computer Laboratory', category: 'Academic Building' },
+      { name: 'HMNTL', category: 'Research' },
+      { name: 'Civil and Environmental Engineering Building', category: 'Academic Building' },
+      { name: 'Newmark Civil Engineering Laboratory', category: 'Academic Building' },
+      { name: 'Transportation Building', category: 'Academic Building' },
+      { name: 'Ceramics Building', category: 'Academic Building' },
+      { name: 'Engineering Sciences Building (ESB)', category: 'Academic Building' },
+      { name: 'Engineering Student Projects Laboratory (ESPL)', category: 'Maker Space' },
+      { name: 'Loomis Laboratory', category: 'Academic Building' },
+      { name: 'Sidney Lu Mechanical Engineering Building', category: 'Academic Building' },
+      { name: 'Materials Science and Engineering Building', category: 'Academic Building' },
+      { name: 'Campus Recreation Center East (CRCE)', category: 'Recreation' },
+      { name: 'Foellinger Auditorium', category: 'Lecture Hall' },
+      { name: 'Altgeld Hall', category: 'Academic Building' },
+      { name: 'Lincoln Hall', category: 'Academic Building' },
+      { name: 'Gregory Hall', category: 'Academic Building' },
+      { name: 'Business Instructional Facility (BIF)', category: 'Academic Building' },
+      { name: 'Education Building', category: 'Academic Building' },
+      { name: 'Armory', category: 'Academic Building' },
+      { name: 'Law Building', category: 'Academic Building' },
+      { name: 'ACES Library', category: 'Library' },
+      { name: 'Turner Hall', category: 'Academic Building' },
+      { name: 'Smith Memorial Hall', category: 'Music' },
+      { name: 'Krannert Art Museum', category: 'Museum' },
+      { name: 'Spurlock Museum', category: 'Museum' },
+      { name: 'Huff Hall', category: 'Athletics' },
+      { name: 'Activities and Recreation Center Fields', category: 'Recreation' },
+      { name: 'Research Park', category: 'Research' },
+      { name: 'Veterinary Medicine Basic Sciences Building', category: 'Academic Building' },
+      { name: 'Illini Grove', category: 'Outdoor Space' },
+      { name: 'South Quad', category: 'Outdoor Space' },
+      { name: 'North Quad', category: 'Outdoor Space' },
+      { name: 'Library (Main Library)', category: 'Library' },
+      { name: 'ISR Dining', category: 'Dining' },
+      { name: 'PAR Dining Hall', category: 'Dining' },
+      { name: 'FAR Dining Hall', category: 'Dining' }
+    ];
+
+    return names.map((item, idx) => ({
+      id: idx + 1,
+      name: item.name,
+      category: item.category,
+      imageUrl: makeImage(item.name)
+    }));
+  }, []);
+
+  const displayCount = (name: string) => {
+    const key = name.toLowerCase();
+    const stored = usageMap[key] || 0;
+    return stored + 1; // default baseline count is 1
+  };
 
   return (
     <div className="illini-cute w-full min-h-screen bg-gradient-to-br from-[#13294B] via-[#1f3d63] to-[#E84A27] py-12 px-6">
@@ -134,7 +174,7 @@ export default function LocationListPage() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-[#1f3d63] text-sm">Visited</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-orange-600 text-2xl">{location.visitCount}</span>
+                    <span className="text-orange-600 text-2xl">{displayCount(location.name)}</span>
                     <span className="text-[#1f3d63] text-sm">times</span>
                   </div>
                 </div>

@@ -5,8 +5,9 @@
 UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a React frontend, an API backend, and an LLM/RAG layer that will ground suggestions in real campus data.
 
 The current version focuses on:
-- A full user flow (Auth0 login → main planner → history).
+- A full user flow (Auth0 login or local guest → main planner → history → favorites).
 - LLM-based schedule generation via Fireworks.ai with three models.
+- Local SQLite storage for histories and building-usage stats (no MongoDB required).
 - A robust output contract: every model returns a JSON schedule plus a textual `reason`, with a consistent fallback if context is insufficient.
 
 ---
@@ -31,15 +32,19 @@ The current version focuses on:
 
 - **Search History Page (`/history`)**
   - View previously saved schedules.
-  - Click an entry to restore it into the main view.
-  - Persists either via MongoDB (for authenticated users) or local in-memory history (fallback).
+  - Click an entry to restore it into the main view; restored schedules no longer show the “Select” button.
+  - Always loads from the local SQLite backend (Auth0 token optional; guest user supported).
 
 ![hist](md_img/history.png)
 
+- **Favorites Page (`/favorites`)**
+  - 50+ UIUC locations with images; shows visit counts backed by the `building_usage` SQLite table (defaults to 1 if no prior data).
+  - “Weather” (AccuWeather) and “Bus Route” (mtd.org) quick links in the header.
+
 - **Backend Integration**
-  - API endpoints to save and list history entries.
-  - History items store the original user request, requested date, and the selected path option(s).
-  - Prototype LLM endpoint (`/api/fireworks-test`) that calls a Llama-based model on Fireworks.ai and returns a structured schedule-like JSON.
+  - API endpoints to save and list history entries (SQLite), plus building-usage stats.
+  - History items store the original user request, requested date, and the selected path option(s); saving a plan increments per-building usage counts.
+  - Prototype LLM endpoint (`/api/fireworks-test`) that calls a Fireworks model and returns a structured schedule-like JSON.
 
 ---
 
@@ -54,8 +59,8 @@ The current version focuses on:
 
 - **Backend**
   - Node.js / Express
-  - MongoDB models for `user` and `history`
-  - REST API consumed by the frontend via `src/api/histories.ts`
+  - SQLite (`backend/data.sqlite`) for users, histories, and building usage (`backend/db.js`)
+  - REST API consumed by the frontend via `src/api/histories.ts` and `src/api/buildings.ts`
   - Fireworks.ai LLM integration (via the `openai` client) using multiple models
 
 - **LLM / Prompting**
@@ -83,41 +88,13 @@ The current version focuses on:
   - `src/components/SearchHistoryPage.tsx`: grouped-by-date history list with restore behavior.
 
 - **Backend App**
-  - `backend/index.js`: Express server and API wiring.
-  - `backend/models/user.js`, `backend/models/history.js`: Mongoose models.
-  - Exposes endpoints used by `frontend/src/api/histories.ts`:
-    - Save a selected plan.
-    - List histories.
-    - Get a single history by ID.
-  - Provides a prototype LLM test endpoint:
-    - `GET /api/fireworks-test` → calls Fireworks.ai with a structured prompt and returns:
-      ```json
-      {
-        "success": true,
-        "status": "GOOD RESULT" | "LACK INFO",
-        "reason": "short explanation (3–150 words)",
-        "pathResult": [ /* schedule items, or fallback */ ]
-      }
-      ```
-  - Provides a multi-model LLM endpoint:
-    - `POST /api/llm-schedules` → given `{ userRequest, date }`, calls the three models above and returns:
-      ```json
-      {
-        "success": true,
-        "options": [
-          {
-            "id": 1,
-            "modelId": "accounts/fireworks/models/deepseek-v3p1",
-            "modelName": "DeepSeek v3.1",
-            "status": "GOOD RESULT" | "LACK INFO",
-            "reason": "why this schedule was created or why context is limited",
-            "title": "string",
-            "schedule": [ { "time": "13:00", "location": "Grainger Library 2F", ... } ],
-            "isFallback": true
-          }
-        ]
-      }
-      ```
+  - `backend/index.js`: Express server and API wiring (SQLite, Auth0 optional with local guest fallback).
+  - `backend/db.js`: SQLite schema and helpers for users, histories, and building usage.
+  - REST endpoints:
+    - Histories: save, list, get by ID (`/api/histories`, `/api/histories/:id`).
+    - Building usage: `/api/building-usage` (used by Favorites counts).
+    - LLM test: `GET /api/fireworks-test`.
+    - Multi-model schedules: `POST /api/llm-schedules` (returns three options).
 
 - **LLM Prompt Module**
   - `LLM/llmama.js`:
@@ -126,7 +103,7 @@ The current version focuses on:
 
 ---
 
-## LLM Prototype: Fireworks.ai + Llama
+## LLM Prototype: Fireworks.ai + Llama (contract unchanged)
 
 This project includes an early LLM integration to experiment with schedule generation before the full RAG pipeline is wired up.
 

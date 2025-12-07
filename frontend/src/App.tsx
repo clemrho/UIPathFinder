@@ -68,6 +68,7 @@ export default function App() {
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
   const [currentUserRequest, setCurrentUserRequest] = useState<string>("");
   const [currentRequestedDate, setCurrentRequestedDate] = useState<string>("");
+  const [restoredView, setRestoredView] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     // If we already stored a login flag, trust it
@@ -115,6 +116,7 @@ export default function App() {
 
   const handleGeneratePaths = async (userRequest: string, date: string) => {
     setShowRestore(false);
+    setRestoredView(false);
     setCurrentUserRequest(userRequest);
     setCurrentRequestedDate(date);
     try {
@@ -152,6 +154,7 @@ export default function App() {
   } | null>(null);
 
   const handleSelectPlan = async (selected: PathOption) => {
+    setRestoredView(false);
     // Update UI to show the selected plan
     setPathOptions([selected]);
     // Build subtitle as arrow-joined places (every place in the selected schedule)
@@ -168,45 +171,34 @@ export default function App() {
       // store only the selected option so history reflects the chosen plan
       pathOptions: [selected],
     };
-    // Try saving to backend for authenticated users, also update local history immediately
+    // Always try saving to backend (SQLite). Falls back to local entry on failure.
     try {
-      if (isAuthenticated && typeof getAccessTokenSilently === "function") {
-        const saved = await saveHistory(getAccessTokenSilently, payload);
-        const entry: SearchHistoryEntry = {
-          id: saved._id || saved.id || Date.now().toString(),
-          timestamp: saved.createdAt ? new Date(saved.createdAt) : new Date(),
-          userRequest:
-            saved.userRequest || saved.user_request || payload.userRequest,
-          date: saved.requestedDate || payload.requestedDate,
-          pathOptions: (
-            saved.pathOptions ||
-            saved.path_options || [selected]
-          ).map((p: any, idx: number) => ({
-            id: idx,
-            title: p.title,
-            schedule: p.schedule || [],
-          })),
-          title: saved.title || payload.title,
-          subtitle: saved.subtitle || payload.subtitle,
-        };
-        setSearchHistory((prev) => [entry, ...prev]);
-        setToast({ message: "Saved!", type: "success" });
-        setTimeout(() => setToast(null), 2000);
-      } else {
-        // not authenticated — just add to local history
-        const entry: SearchHistoryEntry = {
-          id: Date.now().toString(),
-          timestamp: new Date(),
-          userRequest: payload.userRequest,
-          date: payload.requestedDate,
-          pathOptions: [selected],
-          title: payload.title,
-          subtitle: payload.subtitle,
-        };
-        setSearchHistory((prev) => [entry, ...prev]);
-        setToast({ message: "Saved locally!", type: "success" });
-        setTimeout(() => setToast(null), 2000);
-      }
+      const saved = await saveHistory(
+        typeof getAccessTokenSilently === "function"
+          ? getAccessTokenSilently
+          : null,
+        payload,
+      );
+      const entry: SearchHistoryEntry = {
+        id: saved._id || saved.id || Date.now().toString(),
+        timestamp: saved.createdAt ? new Date(saved.createdAt) : new Date(),
+        userRequest:
+          saved.userRequest || saved.user_request || payload.userRequest,
+        date: saved.requestedDate || payload.requestedDate,
+        pathOptions: (
+          saved.pathOptions ||
+          saved.path_options || [selected]
+        ).map((p: any, idx: number) => ({
+          id: idx,
+          title: p.title,
+          schedule: p.schedule || [],
+        })),
+        title: saved.title || payload.title,
+        subtitle: saved.subtitle || payload.subtitle,
+      };
+      setSearchHistory((prev) => [entry, ...prev]);
+      setToast({ message: "Saved!", type: "success" });
+      setTimeout(() => setToast(null), 2000);
     } catch (err) {
       console.debug("saveHistory failed", err);
       // fallback: add local entry so user sees it
@@ -237,6 +229,7 @@ export default function App() {
   const handleRestoreFromHistory = (entry: SearchHistoryEntry) => {
     setPathOptions(entry.pathOptions);
     setShowRestore(false);
+    setRestoredView(true);
     navigate("/");
   };
 
@@ -267,7 +260,7 @@ export default function App() {
       <MainContent
         pathOptions={pathOptions}
         showRestore={showRestore}
-        onSelectPlan={handleSelectPlan}
+        onSelectPlan={restoredView ? undefined : handleSelectPlan}
       />
     </div>
   );
