@@ -112,14 +112,16 @@ export default function App() {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("uipathfinder_logged_in");
     }
-    // Call Auth0 logout if available
-    if (typeof window !== "undefined") {
-      logout({
-        logoutParams: {
-          returnTo: `${window.location.origin}/login`,
-        },
-      });
-    } else {
+    // Call Auth0 logout only when authenticated; otherwise just navigate
+    const returnTo = typeof window !== "undefined" ? `${window.location.origin}/login` : "/login";
+    try {
+      if (isAuthenticated && typeof logout === "function") {
+        logout({ logoutParams: { returnTo } });
+      } else {
+        navigate("/login");
+      }
+    } catch (err) {
+      console.debug("Auth0 logout fallback", err);
       navigate("/login");
     }
   };
