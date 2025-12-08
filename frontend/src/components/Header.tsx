@@ -142,8 +142,8 @@ export function Header({
     <header className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 text-white shadow-lg">
       {toast && <Toast message={toast.message} type={toast.type} />}
       {showWeather && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-[420px] text-slate-800 relative">
+        <div className="fixed inset-0 z-[1200] bg-black/50 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[420px] text-slate-800 relative z-[1201]">
             <button
               className="absolute top-2 right-2 text-slate-500 hover:text-slate-700"
               onClick={() => setShowWeather(false)}
