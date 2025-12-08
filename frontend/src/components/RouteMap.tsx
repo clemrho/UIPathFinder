@@ -56,11 +56,18 @@ const stopIcon = (index: number, name: string) =>
 const palette = ["#2563eb", "#8b5cf6", "#22c55e", "#eab308", "#f97316", "#ef4444"];
 
 export function RouteMap({ locations, segments }: RouteMapProps) {
-  const validLocations = (locations || []).filter(
-    (l) => Number.isFinite(l.lat) && Number.isFinite(l.lng)
-  );
+  const fallbackOrigin =
+    (locations || []).find((l) => Number.isFinite(l.lat) && Number.isFinite(l.lng)) || {
+      lat: 40.1106,
+      lng: -88.2073
+    };
 
-  if (!validLocations || validLocations.length < 2) {
+  const resolvedPositions: [number, number][] = (locations || []).map((l) => {
+    if (Number.isFinite(l.lat) && Number.isFinite(l.lng)) return [l.lat, l.lng];
+    return [fallbackOrigin.lat, fallbackOrigin.lng];
+  });
+
+  if (!resolvedPositions || resolvedPositions.length < 2) {
     return (
       <div className="mt-4">
         <div className="w-full h-[200px] rounded-lg border border-gray-200 flex items-center justify-center bg-gray-50 text-sm text-gray-500">
@@ -70,27 +77,30 @@ export function RouteMap({ locations, segments }: RouteMapProps) {
     );
   }
 
-  const positions: [number, number][] = useMemo(
-    () => validLocations.map((l) => [l.lat, l.lng]),
-    [validLocations]
-  );
+  const positions: [number, number][] = useMemo(() => resolvedPositions, [resolvedPositions]);
 
   const routes = useMemo(() => {
+    // Build a map for quick lookup of provided segment routes
+    const segmentMap: Record<string, [number, number][]> = {};
     if (segments && segments.length) {
-      return segments
-        .filter((s) => Array.isArray(s.route) && s.route.length >= 2)
-        .map((s, idx) => ({
-          key: `${s.fromIndex}-${s.toIndex}`,
-          color: palette[idx % palette.length],
-          points: s.route.map((p) => [p.lat, p.lng] as [number, number]),
-        }));
+      segments.forEach((s) => {
+        if (Array.isArray(s.route) && s.route.length >= 2) {
+          segmentMap[`${s.fromIndex}-${s.toIndex}`] = s.route.map((p) => [p.lat, p.lng]);
+        }
+      });
     }
-    // fallback to straight lines between stops
-    return positions.slice(0, -1).map((_, idx) => ({
-      key: `${idx}-${idx + 1}`,
-      color: palette[idx % palette.length],
-      points: [positions[idx], positions[idx + 1]],
-    }));
+
+    // Ensure every consecutive pair of stops is drawn; use provided route if available, else straight line
+    return positions.slice(0, -1).map((_, idx) => {
+      const key = `${idx}-${idx + 1}`;
+      const provided = segmentMap[key];
+      const points = provided && provided.length >= 2 ? provided : [positions[idx], positions[idx + 1]];
+      return {
+        key,
+        color: palette[idx % palette.length],
+        points,
+      };
+    });
   }, [segments, positions]);
 
   const center = positions[0];
@@ -117,17 +127,17 @@ export function RouteMap({ locations, segments }: RouteMapProps) {
           />
         ))}
 
-        {validLocations.map((loc, idx) => (
+        {(locations || []).map((loc, idx) => (
           <Marker
             key={loc.name + idx}
-            position={[loc.lat, loc.lng]}
+            position={positions[idx]}
             icon={stopIcon(idx, loc.name)}
           >
             <Popup>
               <div className="text-sm">
                 <div className="font-semibold text-gray-800">{loc.name}</div>
-                {idx + 1 < locations.length && (
-                  <div className="text-gray-600">Next: {locations[idx + 1].name}</div>
+                {idx + 1 < (locations?.length || 0) && (
+                  <div className="text-gray-600">Next: {locations?.[idx + 1]?.name}</div>
                 )}
               </div>
             </Popup>

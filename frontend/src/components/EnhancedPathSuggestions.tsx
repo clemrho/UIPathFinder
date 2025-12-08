@@ -111,11 +111,49 @@ export function EnhancedPathSuggestions({ pathOptions, onSelectPlan }: EnhancedP
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {pathOptions.map((path) => {
         const isExpanded = expandedPaths[path.id] ?? true;
-        const locations: Location[] = path.schedule.map(item => ({
-          name: item.location,
-          lat: item.coordinates.lat,
-          lng: item.coordinates.lng
-        }));
+        // Fill missing coordinates from segment endpoints when available
+        const getCoordForIndex = (idx: number) => {
+          const item = path.schedule[idx];
+          const coord = item?.coordinates || {};
+          // accept multiple key shapes from the model
+          const lat =
+            coord.lat ??
+            coord.latitude ??
+            coord.Latitude ??
+            coord.latitudes ??
+            coord.latlng?.[0];
+          const lng =
+            coord.lng ??
+            coord.long ??
+            coord.longitude ??
+            coord.Longitude ??
+            coord.latlng?.[1];
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            return { lat, lng };
+          }
+          if (Array.isArray(path.segments)) {
+            const segFrom = path.segments.find((s) => s.fromIndex === idx && Array.isArray(s.route) && s.route.length);
+            if (segFrom) {
+              const p = segFrom.route[0];
+              if (Number.isFinite(p.lat) && Number.isFinite(p.lng)) return { lat: p.lat, lng: p.lng };
+            }
+            const segTo = path.segments.find((s) => s.toIndex === idx && Array.isArray(s.route) && s.route.length);
+            if (segTo) {
+              const p = segTo.route[segTo.route.length - 1];
+              if (Number.isFinite(p.lat) && Number.isFinite(p.lng)) return { lat: p.lat, lng: p.lng };
+            }
+          }
+          return null;
+        };
+
+        const locations: Location[] = path.schedule.map((item, idx) => {
+          const coord = getCoordForIndex(idx);
+          return {
+            name: item.location,
+            lat: coord?.lat ?? NaN,
+            lng: coord?.lng ?? NaN,
+          };
+        });
 
         const isSelected = selectedId === path.id;
 
