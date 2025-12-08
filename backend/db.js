@@ -1,10 +1,15 @@
 const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'data.sqlite');
+// Resolve DB path and ensure parent directory exists to avoid SQLITE_CANTOPEN
+const rawDbPath = process.env.DB_PATH || path.join(__dirname, 'data.sqlite');
+const dbPath = path.resolve(rawDbPath);
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('Failed to open SQLite DB', err);
+    console.error('Failed to open SQLite DB at', dbPath, err);
   } else {
     console.log('SQLite DB connected at', dbPath);
   }
