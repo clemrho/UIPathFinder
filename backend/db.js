@@ -2,10 +2,20 @@ const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 
-// Resolve DB path and ensure parent directory exists to avoid SQLITE_CANTOPEN
-const rawDbPath = process.env.DB_PATH || path.join(__dirname, 'data.sqlite');
-const dbPath = path.resolve(rawDbPath);
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+// Resolve DB path; keep it inside the project unless an absolute, writable path is provided
+const rawDbPath = process.env.DB_PATH || 'data.sqlite';
+let dbPath = path.isAbsolute(rawDbPath) ? rawDbPath : path.join(__dirname, rawDbPath);
+let dbDir = path.dirname(dbPath);
+
+try {
+  fs.mkdirSync(dbDir, { recursive: true });
+} catch (e) {
+  // If the target directory is not writable (e.g., /backend on Render), fall back to local path
+  console.warn(`Cannot create DB directory at ${dbDir}, falling back to local data.sqlite`, e.code || e.message);
+  dbPath = path.join(__dirname, 'data.sqlite');
+  dbDir = path.dirname(dbPath);
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
