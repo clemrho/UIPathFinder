@@ -1,231 +1,81 @@
 # UIPathFinder – UIUC Smart Schedule & Path Planner
 
-> "Big Brother is Watching You."  --- _1984_
+> "Big Brother is Watching You" -- 1984
 
-UIPathFinder is a web app that helps UIUC students plan their day as a sequence of activities and locations on campus. It combines a React frontend, an API backend, and an LLM layer that is grounded with campus data (buildings, weather, restaurants, and user history stored locally).
+UIPathFinder helps UIUC students plan a full day on campus: describe your needs, and the app generates multiple path options with time-stamped stops, lunch/dinner picks, weather context, and maps—everything persisted in SQLite.
 
-The current version focuses on:
-- A full user flow (Auth0 login or local guest → main planner → history → favorites).
-- LLM-based schedule generation via Fireworks.ai with two models (Qwen3 VL 30B, Llama v3.3).
-- Local SQLite storage for histories, building-usage stats, and restaurant context (no MongoDB required).
-- A robust output contract: every model returns a JSON schedule plus a textual `reason`, with a consistent fallback if context is insufficient.
+## What’s included (final build)
+- Auth0 SPA login (env-driven) with guest fallback on backend.
+- Planner inputs: free-text needs, date, home address, meal preference, “allow sleep at Grainger.”
+- LLM plans (Fireworks Qwen3 VL 30B A3B + Llama v3.3 70B) enforce: start/end at home (unless sleep at library), ≥5 stops, lunch/dinner from the restaurant list; missing coords are backfilled so **all stops plot**.
+- Maps: Leaflet shows every stop; straight-line routes between consecutive stops to avoid missing points; markers colored by academic/other. Weather modal is layered above the map.
+- Favorites: 50+ campus locations from `database/uiuc_with_images.csv`; per-card fallback pool; visit counts seeded/randomized and persisted in `building_usage` (SQLite); select/restore increments usage.
+- History: Reads from SQLite (Auth0 token optional); restore removes “Select” CTA and repopulates planner.
+- Restaurants: `database/UIUC_Restaurants.csv` feeds lunch/dinner + meal preference to the LLM.
+- Weather: NWS modal (Champaign/KCMI), °F/°C toggle, “open full forecast” button.
+- Header quick links: Bus route (mtd.org) and weather.
+- Loading UX: Spinner plus three recommended spots; overlay keeps prior results visible.
+- Data resilience: coordinate backfill per stop; per-card image fallbacks; Alma Mater/photo pool avoids broken images.
 
----
+## Architecture (frontend ↔ backend)
+![architecture](md_img/mapinfo.png)
+- **Frontend:** React/Vite + Auth0 SPA SDK + Leaflet; planner, maps, history, favorites, weather modal.
+- **Backend:** Express + SQLite + Fireworks.ai; endpoints for histories, building-usage, schedules; OSRM fetcher retained (map uses straight lines for completeness).
+- **LLM layer:** `LLM/llmama.js` builds prompt (home/meal/weather/history/buildings/restaurants); `backend/index.js` calls Fireworks, enforces JSON contract, backfills coords, applies fallbacks.
 
-## Features
+## Tech stack
+- Frontend: React 18 + TypeScript, Vite, React Router, Leaflet, Auth0 SPA SDK.
+- Backend: Node/Express, SQLite (`DB_PATH` or `backend/data.sqlite`), Fireworks.ai (via `openai` client).
+- Styling: Utility-first classes, custom components.
 
-- **Authentication**
-  - Login via email/password UI plus Auth0 social login.
-  - Auth-protected routes (`/` main planner, `/history` search history).
-  - Logout support and session persistence.
-
+## Key screens
 ![login](md_img/login.png)
+![planning](md_img/search.png)
+![map](md_img/mapinfo.png)
 
+## Favorites & images
+![favorites](md_img/history.png)
+- Source: `database/uiuc_with_images.csv`; per-card hashed fallback pool (Alma Mater + campus photos).
+- Usage: `building_usage` seeds Grainger/Main Quad higher; select/restore increments counts to keep favorites fresh.
 
-- **Main Planning Page (`/`)**
-  - Prompt-based request: users describe the kind of day they want (classes, study, gym, etc.), pick a date, enter home address, choose meal preference, and optionally allow “sleep at Grainger.”
-  - Generates multiple “path options” – each is a sequence of time-stamped activities at UIUC locations; must start/end at home (unless sleeping at Grainger), include ≥5 stops, and insert lunch/dinner from the restaurant list.
-  - UI shows each option as a structured schedule (time, location, activity) with coordinates for each stop, real-road routes (Leaflet + OSRM), and estimated distances.
-  - Loading state shows a spinner plus three recommended spots while LLM results load; existing paths remain visible behind an overlay during refreshes.
+## Frontend structure
+- `src/main.tsx` – mounts app with `Auth0Provider` + router.
+- `src/App.tsx` – routes (`/` planner/login, `/history`, `/favorites`).
+- `src/components/Header.tsx` – inputs, weather modal, quick links.
+- `src/components/EnhancedPathSuggestions.tsx` – path cards, timelines, maps.
+- `src/components/RouteMap.tsx` – plots all stops; straight lines.
+- `src/components/LocationListPage.tsx` – favorites grid with usage + image fallbacks.
+- `src/components/SearchHistoryPage.tsx` – history list/restore.
+- `src/components/RecommendedSpots.tsx` – loading recommendations.
 
-![main](md_img/search.png)
-![main](md_img/mapinfo.png)
+## Backend structure
+- `backend/index.js` – Express API, Auth0 optional (guest), `/api/llm-schedules`, `/api/fireworks-test`, histories, building-usage, OSRM fetcher.
+- `backend/db.js` – SQLite schema/helpers (users, histories, building_usage, restaurants).
+- `database` – restaurants CSV, building images CSV.
+- `LLM/llmama.js` – prompt builder with home/meal/weather/history/buildings/restaurants.
 
-- **Search History Page (`/history`)**
-  - View previously saved schedules.
-  - Click an entry to restore it into the main view; restored schedules no longer show the “Select” button.
-  - Always loads from the local SQLite backend (Auth0 token optional; guest user supported).
+## Environment
+Frontend (`frontend/.env` or host env):
+```
+VITE_AUTH0_DOMAIN=dev-x8hz2rfhh8u1hpwz.us.auth0.com
+VITE_AUTH0_CLIENT_ID=<your SPA client id>
+VITE_AUTH0_AUDIENCE=urn:uipathfinder-api
+VITE_API_BASE=http://localhost:3001/api   # or deployed backend
+```
+Backend (`backend/.env`):
+```
+AUTH0_DOMAIN=dev-x8hz2rfhh8u1hpwz.us.auth0.com
+AUTH0_AUDIENCE=urn:uipathfinder-api
+FIREWORKS_API_KEY=...
+PORT=3001
+DB_PATH=./data.sqlite    # or /data/data.sqlite with a Render Disk
+```
 
-![hist](md_img/history.png)
+## Running locally
+- Backend: `cd backend && npm install && node index.js`
+- Frontend: `cd frontend && npm install && npm run dev` (build outputs to `build/`; set publish dir accordingly)
 
-- **Favorites Page (`/favorites`)**
-  - 50+ UIUC locations with images; broken images fall back to a stable Alma Mater photo. Visit counts backed by the `building_usage` SQLite table (defaults to 1 if no prior data).
-  - Selecting or restoring a path increments building usage counts in SQLite so favorites stay fresh.
-  - “Weather” (AccuWeather) and “Bus Route” (mtd.org) quick links in the header.
-
-- **Backend Integration**
-  - API endpoints to save and list history entries (SQLite), plus building-usage stats.
-  - History items store the original user request, requested date, and the selected path option(s); saving a plan increments per-building usage counts.
-  - Prototype LLM endpoint (`/api/fireworks-test`) that calls a Fireworks model and returns a structured schedule-like JSON.
-
----
-
-## Tech Stack
-
-- **Frontend**
-  - React 18 + TypeScript
-  - Vite
-  - React Router
-  - Auth0 SPA SDK (`@auth0/auth0-react`)
-  - Tailwind-style utility classes and custom components
-
-- **Backend**
-  - Node.js / Express
-  - SQLite (`backend/data.sqlite`) for users, histories, building usage, and restaurant context (`backend/db.js`)
-  - REST API consumed by the frontend via `src/api/histories.ts` and `src/api/buildings.ts`
-  - Fireworks.ai LLM integration (via the `openai` client) using two models
-
-- **LLM / Prompting**
-  - Central prompt builder in `LLM/llmama.js`
-  - LLM caller + JSON post-processing in `backend/index.js` (`callFireworksAPI`, `/api/llm-schedules`)
-  - Models currently used (on Fireworks.ai):
-    - `accounts/fireworks/models/deepseek-v3p1` (DeepSeek v3.1)
-    - `accounts/fireworks/models/qwen3-30b-a3b-instruct` (Qwen3 30B-A3B Instruct)
-    - `accounts/fireworks/models/llama-v3p3-70b-instruct` (Llama v3.3 70B Instruct)
-
-
----
-
-## High-Level Architecture
-
-- **Frontend App**
-  - `src/main.tsx`: mounts the React app and wraps it in `Auth0Provider` and `BrowserRouter`.
-  - `src/App.tsx`: top-level routing and state:
-    - `/` → login page or main planner depending on auth state.
-    - `/history` → search history (requires login).
-    - Logout resets state and calls Auth0 logout.
-  - `src/components/LoginPage.tsx`: login UI, Auth0 redirect buttons.
-  - `src/components/Header.tsx`: top bar with app name, history button, logout button, and schedule prompt form.
-  - `src/components/MainContent.tsx`: shows either the “start planning” empty state or the generated path options.
-  - `src/components/SearchHistoryPage.tsx`: grouped-by-date history list with restore behavior.
-
-- **Backend App**
-  - `backend/index.js`: Express server and API wiring (SQLite, Auth0 optional with local guest fallback).
-  - `backend/db.js`: SQLite schema and helpers for users, histories, building usage.
-  - REST endpoints:
-    - Histories: save, list, get by ID (`/api/histories`, `/api/histories/:id`).
-    - Building usage: `/api/building-usage` (read) and `/api/building-usage/increment` (write on select/restore).
-    - LLM test: `GET /api/fireworks-test`.
-    - Multi-model schedules: `POST /api/llm-schedules` (returns two options).
-
-- **LLM Prompt Module**
-  - `LLM/llmama.js`:
-    - `buildFireworksPrompt(...)` builds the full system + context + planning-rules + JSON-schema prompt.
-    - Designed so future backends (local Llama, Mamba, etc.) can reuse the same prompt.
-
----
-
-## LLM Prototype: Fireworks.ai + Llama (updated contract)
-
-This project includes an early LLM integration to experiment with schedule generation before the full RAG pipeline is wired up.
-
-- **Prompt Contract**
-  - Context includes: user profile, building list, weather (Open-Meteo), recent history (or “new customer”), restaurant list from `database/UIUC_Restaurants.csv`, home address, sleep-at-library flag, meal preference, transit guidance.
-  - Planning rules:
-    - Start at home ≥07:00; end at home before 24:00 unless “sleep at library” is true (then end at Grainger).
-    - ≥5 stops including home at start and end.
-    - Two meal stops (lunch/dinner) chosen from the restaurant list, respecting meal preference.
-    - Realistic travel; prefer campus buildings; avoid outdoor-heavy routes in bad weather.
-  - Output: flag `GOOD RESULT` or `LACK INFO` followed immediately by the JSON object; fallback remains Grainger + ECEB when lacking info.
-
-- **Backend Post-Processing**
-  - Makes a single call per model (no retries).
-  - Parses the leading flag (`GOOD RESULT` or `LACK INFO`); if missing, treats it as `LACK INFO`.
-  - Extracts the JSON block, parses it, and ensures:
-    - `pathResult` exists; if missing/empty, substitutes a fallback:
-      - Title “Fallback: Grainger Library + ECEB”.
-      - Two stops: Grainger Library 2F (13:00–23:00) and ECE Building (23:00–09:00).
-    - `reason` is present and truncated to ~150 words.
-  - If JSON parsing fails entirely, also falls back to the same Grainger+ECEB schedule and sets `status: "LACK INFO"`.
-  - The `/api/fireworks-test` route surfaces this as:
-    ```json
-    {
-      "success": true,
-      "status": "GOOD RESULT" | "LACK INFO",
-      "reason": "...",
-      "pathResult": [ ... ]
-    }
-    ```
-
-- **Configuring Fireworks.ai Locally**
-  - Set your API key and model in `backend/.env`:
-    ```env
-    FIREWORKS_API_KEY=sk-...
-    ```
-  - The backend uses:
-    - `baseURL = https://api.fireworks.ai/inference/v1`
-    - models = Qwen3 VL 30B, Llama v3.3 (two options returned)
-  - To test:
-    - Start the backend: `cd backend && npm install && node index.js`
-    - Call from a terminal or REST client:
-      ```bash
-      curl http://localhost:3001/api/fireworks-test
-      ```
-    - You should see JSON with `status`, `reason`, and `pathResult`.
-
----
-
-## Planned Next Steps: RAG & Data-Aware Scheduling
-
-The next phase is to make schedules grounded in real-world UIUC data using a Retrieval-Augmented Generation (RAG) pipeline.
-
-Planned components:
-
-1. **Knowledge Sources**
-   - **MongoDB**: existing and future collections containing:
-     - Course times and locations.
-     - User-specific constraints / preferences.
-   - **UIUC MTD API** (bus system):
-     - Live/near-live bus times and routes.
-     - Travel time between campus locations.
-   - **Weather API**:
-     - Current and forecasted weather to adjust outdoor vs. indoor paths, walking vs. bus, etc.
-   - **UIUC Building Database**:
-     - Canonical list of buildings, coordinates, and categories (academic, dining, recreation).
-     - Possibly building opening hours and amenities.
-
-2. **RAG Pipeline**
-   - Given the user’s text request and target date:
-     - Retrieve relevant facts from MongoDB and the building database.
-     - Query MTD and weather APIs for time- and location-dependent information.
-   - Construct a **grounded context** and feed it as part of the LLM prompt so the model reasons over real UIUC data, not just generic knowledge.
-
-3. **Post-Processing & Output Tuning**
-   - The model will return a candidate schedule; we will:
-     - Normalize it into a strict internal schema:
-       ```ts
-       interface ScheduleItem {
-         time: string;
-         location: string;
-         activity: string;
-         coordinates: { lat: number; lng: number };
-       }
-       interface PathOption {
-         id: number;
-         title: string;
-         schedule: ScheduleItem[];
-       }
-       ```
-     - Validate times, locations, and travel feasibility (e.g., ensure transit time is realistic).
-     - Attach coordinates via the building database so the frontend can easily render maps or visualizations.
-   - This post-tuned structure is exactly what the current frontend already expects, so the UI can remain largely unchanged while the backend logic becomes more intelligent.
-
-4. **Better Personalization**
-   - Use stored search histories and user preferences to:
-     - Bias the model toward favorite buildings or study spots.
-     - Avoid time conflicts with known commitments.
-     - Suggest variety (not the same building every day).
-
----
-
-## Running the Project (High Level)
-
-> Adjust ports/commands if your local setup differs.
-
-- **Frontend**
-  - `cd UIPathFinder/frontend`
-  - `npm install`
-  - `npm run dev`
-  - Open `http://localhost:3000` (or Vite’s default port).
-
-- **Backend**
-  - `cd UIPathFinder/backend`
-  - `npm install`
-  - Configure `.env` (MongoDB URI, Auth0 audience, etc.).
-  - `node index.js` (or `npm start` if configured).
-
----
-
-## Summary
-
-UIPathFinder already supports login, LLM-backed schedule generation (with three Fireworks models), interactive route maps, and history management with a clean UI. On the backend, a prompt-driven LLM pipeline (centralized in `LLM/llmama.js` and `backend/index.js`) enforces a strict JSON schema and two reliability flags (`GOOD RESULT` / `LACK INFO`), always returning a usable schedule (or a Grainger+ECEB fallback) plus a human-readable `reason`. The next iterations will focus on wiring real RAG context (MongoDB data, UIUC MTD, weather, building DB) into that pipeline so the suggested paths are grounded in live campus information.
+## LLM contract (current)
+- Context: user profile/history, buildings, weather (Open-Meteo), restaurants CSV, meal preference, home address, sleep-at-library flag, transit guidance.
+- Rules: start/end at home (unless sleep at library), ≥5 stops, include lunch & dinner, realistic timing.
+- Output: `GOOD RESULT`/`LACK INFO` + JSON `pathResult` + `reason`; backend enforces/fallbacks, truncates reason, backfills coordinates, attaches optional OSRM segments.
