@@ -18,7 +18,7 @@ UIPathFinder helps UIUC students plan a full day on campus: describe your needs,
 - Data resilience: coordinate backfill per stop; per-card image fallbacks; Alma Mater/photo pool avoids broken images.
 
 ## Architecture (frontend ↔ backend)
-![architecture](md_img/mapinfo.png)
+![architecture](md_img/Architecture.png)
 - **Frontend:** React/Vite + Auth0 SPA SDK + Leaflet; planner, maps, history, favorites, weather modal.
 - **Backend:** Express + SQLite + Fireworks.ai; endpoints for histories, building-usage, schedules; OSRM fetcher retained (map uses straight lines for completeness).
 - **LLM layer:** `LLM/llmama.js` builds prompt (home/meal/weather/history/buildings/restaurants); `backend/index.js` calls Fireworks, enforces JSON contract, backfills coords, applies fallbacks.
